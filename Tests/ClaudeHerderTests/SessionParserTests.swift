@@ -109,7 +109,9 @@ final class SessionParserTests: XCTestCase {
         let root = SessionIndexer.projectsRoot
 
         let hits = try await TranscriptSearch.sessionIDs(matching: "herder GHOSTTY", in: root)
-        let misses = try await TranscriptSearch.sessionIDs(matching: "herder zq9xj-never", in: root)
+        // A fresh UUID can't be in any transcript, even this session's.
+        let misses = try await TranscriptSearch.sessionIDs(
+            matching: "herder \(UUID().uuidString)", in: root)
 
         XCTAssertTrue(hits.contains(sessionID))
         XCTAssertEqual(misses, [])

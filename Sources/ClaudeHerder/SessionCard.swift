@@ -2,18 +2,31 @@ import SwiftUI
 
 struct SessionCard: View {
     let session: Session
+    let hasLiveCow: Bool
+    let isFavorite: Bool
     let onOpen: () -> Void
+    let onToggleFavorite: () -> Void
 
-    private static let dateStyle = Date.FormatStyle()
-        .month(.abbreviated).day().hour().minute()
+    @State private var isHovered = false
+
+    private static let exactDateStyle = Date.FormatStyle()
+        .weekday(.abbreviated).month(.abbreviated).day().hour().minute()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(session.projectName.uppercased())
-                .font(.system(size: 11, weight: .semibold))
-                .tracking(0.6)
-                .foregroundStyle(Theme.secondary)
-                .lineLimit(1)
+            HStack(spacing: 6) {
+                if hasLiveCow {
+                    Text("🐮").help("Its cow checkout still exists")
+                }
+                Text(session.projectName.uppercased())
+                    .font(.system(size: 11, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundStyle(Theme.secondary)
+                    .lineLimit(1)
+                Spacer()
+                favoriteButton
+            }
+            .frame(height: 16)
 
             Text(session.title)
                 .font(Theme.serif(20, weight: .medium))
@@ -28,12 +41,15 @@ struct SessionCard: View {
 
             HStack(alignment: .bottom, spacing: 12) {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("\(session.firstAt.formatted(Self.dateStyle)) → \(session.lastAt.formatted(Self.dateStyle))")
+                    // Re-render each minute so "a few min ago" doesn't go stale.
+                    TimelineView(.periodic(from: .now, by: 60)) { context in
+                        Text(HumanTime.span(from: session.firstAt, to: session.lastAt, now: context.date))
+                    }
+                    .help(exactSpan)
                     Text(stats)
                 }
                 .font(.system(size: 12))
                 .foregroundStyle(Theme.tertiary)
-                .monospacedDigit()
 
                 Spacer()
 
@@ -46,12 +62,32 @@ struct SessionCard: View {
                 .buttonStyle(PillButtonStyle())
                 .disabled(session.cwd == nil)
                 .help(session.cwd.map { "claude --resume in \($0)" } ?? "Unknown folder")
+                .opacity(isHovered ? 1 : 0)
             }
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Theme.border))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(isHovered ? Theme.borderStrong : Theme.border)
+        )
+        .shadow(color: Theme.ink.opacity(isHovered ? 0.08 : 0), radius: 12, y: 4)
+        .offset(y: isHovered ? -2 : 0)
+        .animation(.easeOut(duration: 0.15), value: isHovered)
+        .onHover { isHovered = $0 }
+    }
+
+    /// Always shown once starred; otherwise only on hover, like Open.
+    private var favoriteButton: some View {
+        Button(action: onToggleFavorite) {
+            Text(isFavorite ? "★" : "☆")
+                .font(.system(size: 16))
+                .foregroundStyle(isFavorite ? Theme.clay : Theme.tertiary)
+        }
+        .buttonStyle(.plain)
+        .help(isFavorite ? "Remove from favorites" : "Add to favorites")
+        .opacity(isFavorite || isHovered ? 1 : 0)
     }
 
     @ViewBuilder
@@ -70,6 +106,10 @@ struct SessionCard: View {
                 .lineSpacing(3)
                 .lineLimit(4)
         }
+    }
+
+    private var exactSpan: String {
+        "\(session.firstAt.formatted(Self.exactDateStyle)) → \(session.lastAt.formatted(Self.exactDateStyle))"
     }
 
     private var stats: String {

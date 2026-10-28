@@ -12,6 +12,8 @@ struct ContentView: View {
     @State private var pageLimit = ContentView.pageSize
     @State private var errorMessage: String?
     @State private var showingPeriod = false
+    @State private var favoritesOnly = false
+    @State private var liveCowsOnly = false
 
     private static let pageSize = 40
 
@@ -50,6 +52,9 @@ struct ContentView: View {
 
             searchField.frame(maxWidth: 360)
             periodButton
+            FilterChip(label: "★ Favorites", isOn: $favoritesOnly)
+            FilterChip(label: "🐮 Active", isOn: $liveCowsOnly)
+                .help("Sessions whose cow checkout still exists")
             sortMenu
 
             Button {
@@ -103,6 +108,9 @@ struct ContentView: View {
             .outlinedControl()
         }
         .buttonStyle(.plain)
+        .disabled(ignoresPeriod)
+        .opacity(ignoresPeriod ? 0.45 : 1)
+        .help(ignoresPeriod ? "Favorites and active cows show regardless of period" : "")
         .popover(isPresented: $showingPeriod, arrowEdge: .bottom) {
             PeriodPicker(period: $period)
         }
@@ -144,7 +152,7 @@ struct ContentView: View {
             centered { ProgressView("Reading transcripts…") }
         } else if sessions.isEmpty {
             centered {
-                Text(query.isEmpty ? "No sessions in this period." : "No sessions match “\(query)”.")
+                Text(emptyMessage)
                     .font(Theme.serif(18))
                     .foregroundStyle(Theme.secondary)
             }
@@ -156,7 +164,13 @@ struct ContentView: View {
                         columns: [GridItem(.adaptive(minimum: 400), spacing: 18)], spacing: 18
                     ) {
                         ForEach(sessions.prefix(pageLimit)) { session in
-                            SessionCard(session: session) { open(session) }
+                            SessionCard(
+                                session: session,
+                                hasLiveCow: store.liveCowIDs.contains(session.id),
+                                isFavorite: store.favoriteIDs.contains(session.id),
+                                onOpen: { open(session) },
+                                onToggleFavorite: { store.toggleFavorite(session.id) }
+                            )
                         }
                     }
                     if sessions.count > pageLimit {
@@ -199,9 +213,37 @@ struct ContentView: View {
 
     // MARK: Logic
 
+    /// Favorites and live cows are things you come back to, so their age doesn't matter.
+    private var ignoresPeriod: Bool {
+        favoritesOnly || liveCowsOnly
+    }
+
+    private func isVisible(_ session: Session) -> Bool {
+        if favoritesOnly && !store.favoriteIDs.contains(session.id) {
+            return false
+        }
+        if liveCowsOnly && !store.liveCowIDs.contains(session.id) {
+            return false
+        }
+        if !ignoresPeriod && !period.contains(session) {
+            return false
+        }
+        return searchMatches?.contains(session.id) ?? true
+    }
+
+    private var emptyMessage: String {
+        if !query.isEmpty {
+            return "No sessions match “\(query)”."
+        }
+        if favoritesOnly && store.favoriteIDs.isEmpty {
+            return "No favorites yet. Hover a card and click ☆."
+        }
+        return ignoresPeriod ? "No sessions here." : "No sessions in this period."
+    }
+
     private var visibleSessions: [Session] {
         store.sessions
-            .filter { period.contains($0) && (searchMatches?.contains($0.id) ?? true) }
+            .filter(isVisible)
             .sorted { sortDescending ? sortKey.ascending($1, $0) : sortKey.ascending($0, $1) }
     }
 
@@ -212,7 +254,7 @@ struct ContentView: View {
 
     /// Anything that changes which sessions show resets the scroll page.
     private var filterKey: [AnyHashable] {
-        [query, period.label, sortKey, sortDescending]
+        [query, period.label, sortKey, sortDescending, favoritesOnly, liveCowsOnly]
     }
 
     private func runSearch() async {
@@ -304,5 +346,26 @@ private struct PeriodPicker: View {
             .datePickerStyle(.graphical)
             .labelsHidden()
         }
+    }
+}
+
+private struct FilterChip: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        Button {
+            isOn.toggle()
+        } label: {
+            Text(label)
+                .font(.system(size: 13))
+                .foregroundStyle(isOn ? .white : Theme.ink)
+                .fixedSize()
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(isOn ? Theme.ink : Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).stroke(isOn ? Theme.ink : Theme.border))
+        }
+        .buttonStyle(.plain)
     }
 }

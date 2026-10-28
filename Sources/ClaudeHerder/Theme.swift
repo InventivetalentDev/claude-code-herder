@@ -5,6 +5,7 @@ enum Theme {
     static let background = Color(hex: 0xFAF9F5)
     static let surface = Color.white
     static let border = Color(hex: 0xE8E6DC)
+    static let borderStrong = Color(hex: 0xC9C6BA)
     static let ink = Color(hex: 0x141413)
     static let secondary = Color(hex: 0x5E5D59)
     static let tertiary = Color(hex: 0x87867F)

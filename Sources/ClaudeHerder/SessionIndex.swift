@@ -130,16 +130,38 @@ final class SessionStore {
     private(set) var failures: [IndexFailure] = []
     private(set) var isLoading = false
     private(set) var hasLoaded = false
+    /// Sessions whose cow checkout still exists. Not cached: cows get deleted without
+    /// touching the transcript.
+    private(set) var liveCowIDs: Set<String> = []
+    private(set) var favoriteIDs: Set<String>
+
+    private static let favoritesKey = "favoriteSessionIDs"
+
+    init() {
+        favoriteIDs = Set(UserDefaults.standard.stringArray(forKey: Self.favoritesKey) ?? [])
+    }
 
     func reload() async {
         guard !isLoading else {
             return
         }
         isLoading = true
-        let result = await Task.detached(priority: .userInitiated) { SessionIndexer.index() }.value
+        let (result, cows) = await Task.detached(priority: .userInitiated) {
+            let result = SessionIndexer.index()
+            let cows = result.sessions.filter { $0.cwd.map(Cows.isInLiveCow) ?? false }.map(\.id)
+            return (result, Set(cows))
+        }.value
         sessions = result.sessions
         failures = result.failures
+        liveCowIDs = cows
         isLoading = false
         hasLoaded = true
+    }
+
+    func toggleFavorite(_ id: String) {
+        if favoriteIDs.remove(id) == nil {
+            favoriteIDs.insert(id)
+        }
+        UserDefaults.standard.set(favoriteIDs.sorted(), forKey: Self.favoritesKey)
     }
 }
