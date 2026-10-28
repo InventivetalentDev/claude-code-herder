@@ -75,7 +75,7 @@ struct SessionCard: View {
                 .stroke(isHovered ? Theme.borderStrong : Theme.border)
         )
         .shadow(color: Theme.ink.opacity(isHovered ? 0.08 : 0), radius: 12, y: 4)
-        .opacity(cardOpacity)
+        .opacity(isLeaving ? 0.4 : 1)
         .scaleEffect(isLeaving ? 0.97 : 1)
         .animation(.easeInOut(duration: 0.8), value: isLeaving)
         .offset(y: isHovered ? -2 : 0)
@@ -148,13 +148,6 @@ struct SessionCard: View {
         finishing != nil && !isDone
     }
 
-    /// Done cards (shown via "Show done") sit faded, but come back to full on hover.
-    private var cardOpacity: Double {
-        if isLeaving {
-            return 0.4
-        }
-        return isDone && !isHovered ? 0.55 : 1
-    }
 
     private var looksDone: Bool {
         isDone || finishing != nil

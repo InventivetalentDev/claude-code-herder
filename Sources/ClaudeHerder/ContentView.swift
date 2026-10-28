@@ -162,7 +162,7 @@ struct ContentView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     summaryLine(count: sessions.count)
                     LazyVGrid(
-                        columns: [GridItem(.adaptive(minimum: 400), spacing: 18)], spacing: 18
+                        columns: [GridItem(.adaptive(minimum: 380), spacing: 18)], spacing: 18
                     ) {
                         ForEach(sessions.prefix(pageLimit)) { session in
                             SessionCard(
