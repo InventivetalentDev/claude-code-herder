@@ -51,6 +51,7 @@ struct SessionCard: View {
             }
             .font(.system(size: 12))
             .foregroundStyle(Theme.tertiary)
+            .opacity(isHovered ? 0 : 1)  // the session ID takes this spot on hover
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
@@ -59,6 +60,13 @@ struct SessionCard: View {
         // Above the dimming, so starring still works while hovered.
         .overlay(alignment: .topTrailing) {
             favoriteButton.frame(height: 16).padding(20)
+        }
+        // Clicking anywhere opens; the buttons above handle their own clicks.
+        .contentShape(RoundedRectangle(cornerRadius: 14))
+        .onTapGesture {
+            if canOpen {
+                onOpen()
+            }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 14)
@@ -70,16 +78,17 @@ struct SessionCard: View {
         .onHover { isHovered = $0 }
     }
 
-    /// Dims the card and floats its actions in the middle.
+    /// Resuming needs the folder, so a deleted one can't be opened.
+    private var canOpen: Bool {
+        folder != .missing && session.cwd != nil
+    }
+
+    /// Dims the card, shows Open in the middle and the session ID bottom-left.
     private var hoverActions: some View {
-        ZStack {
+        ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 14).fill(Theme.dim)
-            HStack(spacing: 10) {
-                Button(justCopied ? "Copied" : "Copy ID", action: copyID)
-                    .buttonStyle(PillButtonStyle(prominent: false))
-                    .help(session.id)
-                // Resuming needs the folder, so a deleted one gets no Open.
-                if folder != .missing, let cwd = session.cwd {
+            Group {
+                if canOpen {
                     Button(action: onOpen) {
                         HStack(spacing: 4) {
                             Text("Open")
@@ -88,9 +97,30 @@ struct SessionCard: View {
                         }
                     }
                     .buttonStyle(PillButtonStyle())
-                    .help("claude --resume in \(cwd)")
+                    .help("claude --resume in \(session.cwd ?? "")")
+                } else {
+                    Text("Folder deleted")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.deletedRed)
                 }
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            Button(action: copyID) {
+                HStack(spacing: 6) {
+                    Text(session.id)
+                        .font(.system(size: 11, design: .monospaced))
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Image(systemName: justCopied ? "checkmark" : "doc.on.doc")
+                        .font(.system(size: 11))
+                        .frame(width: 14)
+                }
+                .foregroundStyle(justCopied ? Theme.clay : Theme.secondary)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Copy session ID")
+            .padding(20)
         }
         .transition(.opacity)
     }
