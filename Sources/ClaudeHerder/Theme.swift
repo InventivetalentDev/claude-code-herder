@@ -9,6 +9,7 @@ enum Theme {
     /// Veil over a hovered card: fades its text so the buttons stand out.
     static let dim = Color.white.opacity(0.85)
     static let pillGrey = Color(hex: 0xE3E0D5)
+    static let codeBackground = Color(hex: 0xF0EEE6)
     static let ink = Color(hex: 0x141413)
     static let secondary = Color(hex: 0x5E5D59)
     static let tertiary = Color(hex: 0x87867F)

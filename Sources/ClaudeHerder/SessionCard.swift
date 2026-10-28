@@ -30,7 +30,7 @@ struct SessionCard: View {
             .frame(height: 16)
             .padding(.trailing, 24)  // room for the star overlay
 
-            Text(session.title)
+            Text(InlineMarkdown.render(session.title))
                 .font(Theme.serif(20, weight: .medium))
                 .foregroundStyle(Theme.ink)
                 .lineLimit(2)
@@ -120,14 +120,14 @@ struct SessionCard: View {
     @ViewBuilder
     private var summary: some View {
         if let recap = session.recap {
-            Text(recap)
+            Text(InlineMarkdown.render(recap))
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.secondary)
                 .lineSpacing(3)
                 .lineLimit(5)
         } else if let prompt = session.firstPrompt {
             // No recap yet: the opening prompt is the next best description.
-            Text("“\(prompt)”")
+            Text(InlineMarkdown.render("“\(prompt)”"))
                 .font(.system(size: 14).italic())
                 .foregroundStyle(Theme.tertiary)
                 .lineSpacing(3)
