@@ -12,7 +12,7 @@ struct ContentView: View {
     @State private var pageLimit = ContentView.pageSize
     @State private var errorMessage: String?
     @State private var showingPeriod = false
-    @State private var doneOnly = false
+    @State private var showDone = false
     @State private var liveCowsOnly = false
 
     private static let pageSize = 40
@@ -52,8 +52,8 @@ struct ContentView: View {
 
             searchField.frame(maxWidth: 360)
             periodButton
-            FilterChip(label: "✓ Done", isOn: $doneOnly)
-                .help("Show only sessions marked as done")
+            FilterChip(label: "✓ Show done", isOn: $showDone)
+                .help("Also show sessions marked as done")
             FilterChip(label: "🐮 Active", isOn: $liveCowsOnly)
                 .help("Sessions whose cow checkout still exists")
             sortMenu
@@ -111,7 +111,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .disabled(ignoresPeriod)
         .opacity(ignoresPeriod ? 0.45 : 1)
-        .help(ignoresPeriod ? "Done and active cow sessions show regardless of period" : "")
+        .help(ignoresPeriod ? "Active cow sessions show regardless of period" : "")
         .popover(isPresented: $showingPeriod, arrowEdge: .bottom) {
             PeriodPicker(period: $period)
         }
@@ -170,8 +170,13 @@ struct ContentView: View {
                                 folder: store.folderStates[session.id] ?? .missing,
                                 isDone: store.done.isDone(session),
                                 onOpen: { open(session) },
-                                onToggleDone: { store.toggleDone(session) }
+                                onToggleDone: {
+                                    withAnimation(.easeInOut(duration: 0.35)) {
+                                        store.toggleDone(session)
+                                    }
+                                }
                             )
+                            .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         }
                     }
                     if sessions.count > pageLimit {
@@ -214,14 +219,13 @@ struct ContentView: View {
 
     // MARK: Logic
 
-    /// The done pile and live cows are browsed as a whole, so their age doesn't matter.
+    /// Live cows are browsed as a whole, so their age doesn't matter.
     private var ignoresPeriod: Bool {
-        doneOnly || liveCowsOnly
+        liveCowsOnly
     }
 
     private func isVisible(_ session: Session) -> Bool {
-        // Done sessions are hidden unless the Done chip asks for exactly them.
-        if store.done.isDone(session) != doneOnly {
+        if !showDone && store.done.isDone(session) {
             return false
         }
         if liveCowsOnly && store.folderStates[session.id] != .liveCow {
@@ -237,10 +241,8 @@ struct ContentView: View {
         if !query.isEmpty {
             return "No sessions match “\(query)”."
         }
-        if doneOnly {
-            return "Nothing done yet. Hover a card and click ✓ to mark it done."
-        }
-        return ignoresPeriod ? "No sessions here." : "No sessions in this period."
+        let scope = ignoresPeriod ? "here" : "in this period"
+        return showDone ? "No sessions \(scope)." : "Nothing left to do \(scope)."
     }
 
     private var visibleSessions: [Session] {
@@ -256,7 +258,7 @@ struct ContentView: View {
 
     /// Anything that changes which sessions show resets the scroll page.
     private var filterKey: [AnyHashable] {
-        [query, period.label, sortKey, sortDescending, doneOnly, liveCowsOnly]
+        [query, period.label, sortKey, sortDescending, showDone, liveCowsOnly]
     }
 
     private func runSearch() async {

@@ -10,6 +10,8 @@ struct SessionCard: View {
 
     @State private var isHovered = false
     @State private var justCopied = false
+    /// The pause between ticking ✓ and the card going away; clicking ✓ again cancels it.
+    @State private var finishing: Task<Void, Never>?
 
     private static let exactDateStyle = Date.FormatStyle()
         .weekday(.abbreviated).month(.abbreviated).day().hour().minute()
@@ -73,6 +75,9 @@ struct SessionCard: View {
                 .stroke(isHovered ? Theme.borderStrong : Theme.border)
         )
         .shadow(color: Theme.ink.opacity(isHovered ? 0.08 : 0), radius: 12, y: 4)
+        .opacity(cardOpacity)
+        .scaleEffect(isLeaving ? 0.97 : 1)
+        .animation(.easeInOut(duration: 0.8), value: isLeaving)
         .offset(y: isHovered ? -2 : 0)
         .animation(.easeOut(duration: 0.15), value: isHovered)
         .onHover { isHovered = $0 }
@@ -127,14 +132,54 @@ struct SessionCard: View {
 
     /// Always shown on done cards; otherwise only on hover, like Open.
     private var doneButton: some View {
-        Button(action: onToggleDone) {
-            Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark.circle")
+        Button(action: toggleDone) {
+            Image(systemName: looksDone ? "checkmark.circle.fill" : "checkmark.circle")
                 .font(.system(size: 17))
-                .foregroundStyle(isDone ? Theme.clay : Theme.tertiary)
+                .foregroundStyle(Theme.doneGreen)
+                .symbolEffect(.bounce, value: finishing != nil)
         }
         .buttonStyle(.plain)
-        .help(isDone ? "Mark as not done" : "Mark as done")
-        .opacity(isDone || isHovered ? 1 : 0)
+        .help(looksDone ? "Mark as not done" : "Mark as done")
+        .opacity(looksDone || isHovered ? 1 : 0)
+    }
+
+    /// Just ticked, waiting out the pause before the card goes away.
+    private var isLeaving: Bool {
+        finishing != nil && !isDone
+    }
+
+    /// Done cards (shown via "Show done") sit faded, but come back to full on hover.
+    private var cardOpacity: Double {
+        if isLeaving {
+            return 0.4
+        }
+        return isDone && !isHovered ? 0.55 : 1
+    }
+
+    private var looksDone: Bool {
+        isDone || finishing != nil
+    }
+
+    /// Marking done waits a second so the tick registers before the card leaves.
+    private func toggleDone() {
+        if let pending = finishing {
+            pending.cancel()
+            finishing = nil
+            return
+        }
+        guard !isDone else {
+            onToggleDone()
+            return
+        }
+        finishing = Task {
+            do {
+                try await Task.sleep(for: .seconds(1))
+            } catch {
+                return  // cancelled by a second click
+            }
+            onToggleDone()
+            finishing = nil
+        }
     }
 
     private func copyID() {
