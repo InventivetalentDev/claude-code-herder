@@ -102,4 +102,16 @@ final class SessionParserTests: XCTestCase {
         XCTAssertEqual(result.failures, [])
         XCTAssertFalse(result.sessions.isEmpty)
     }
+
+    /// Every word must match somewhere in the session; this session's own ID is a known hit.
+    func testSearchesRealTranscripts() async throws {
+        let sessionID = try XCTUnwrap(ProcessInfo.processInfo.environment["CLAUDE_CODE_SESSION_ID"])
+        let root = SessionIndexer.projectsRoot
+
+        let hits = try await TranscriptSearch.sessionIDs(matching: "herder GHOSTTY", in: root)
+        let misses = try await TranscriptSearch.sessionIDs(matching: "herder zq9xj-never", in: root)
+
+        XCTAssertTrue(hits.contains(sessionID))
+        XCTAssertEqual(misses, [])
+    }
 }
