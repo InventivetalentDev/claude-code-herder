@@ -30,10 +30,9 @@ struct SessionCard: View {
                     .tracking(0.6)
                     .foregroundStyle(Theme.secondary)
                     .lineLimit(1)
-                Spacer()
-                favoriteButton
             }
             .frame(height: 16)
+            .padding(.trailing, 24)  // room for the star overlay
 
             Text(session.title)
                 .font(Theme.serif(20, weight: .medium))
@@ -46,43 +45,25 @@ struct SessionCard: View {
 
             Spacer(minLength: 0)
 
-            HStack(alignment: .bottom, spacing: 12) {
-                VStack(alignment: .leading, spacing: 3) {
-                    // Re-render each minute so "a few min ago" doesn't go stale.
-                    TimelineView(.periodic(from: .now, by: 60)) { context in
-                        Text(HumanTime.span(from: session.firstAt, to: session.lastAt, now: context.date))
-                    }
-                    .help(exactSpan)
-                    Text(stats)
+            VStack(alignment: .leading, spacing: 3) {
+                // Re-render each minute so "a few min ago" doesn't go stale.
+                TimelineView(.periodic(from: .now, by: 60)) { context in
+                    Text(HumanTime.span(from: session.firstAt, to: session.lastAt, now: context.date))
                 }
-                .font(.system(size: 12))
-                .foregroundStyle(Theme.tertiary)
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    Button(justCopied ? "Copied" : "Copy ID", action: copyID)
-                        .buttonStyle(PillButtonStyle(prominent: false))
-                        .help(session.id)
-                    // Resuming needs the folder, so a deleted one gets no Open.
-                    if folder != .missing, let cwd = session.cwd {
-                        Button(action: onOpen) {
-                            HStack(spacing: 4) {
-                                Text("Open")
-                                Image(systemName: "chevron.right")
-                                    .font(.system(size: 10, weight: .semibold))
-                            }
-                        }
-                        .buttonStyle(PillButtonStyle())
-                        .help("claude --resume in \(cwd)")
-                    }
-                }
-                .opacity(isHovered ? 1 : 0)
+                .help(exactSpan)
+                Text(stats)
             }
+            .font(.system(size: 12))
+            .foregroundStyle(Theme.tertiary)
         }
         .padding(20)
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay { if isHovered { hoverActions } }
+        // Above the dimming, so starring still works while hovered.
+        .overlay(alignment: .topTrailing) {
+            favoriteButton.frame(height: 16).padding(20)
+        }
         .overlay(
             RoundedRectangle(cornerRadius: 14)
                 .stroke(isHovered ? Theme.borderStrong : Theme.border)
@@ -91,6 +72,31 @@ struct SessionCard: View {
         .offset(y: isHovered ? -2 : 0)
         .animation(.easeOut(duration: 0.15), value: isHovered)
         .onHover { isHovered = $0 }
+    }
+
+    /// Dims the card and floats its actions in the middle.
+    private var hoverActions: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 14).fill(Theme.dim)
+            HStack(spacing: 10) {
+                Button(justCopied ? "Copied" : "Copy ID", action: copyID)
+                    .buttonStyle(PillButtonStyle(prominent: false))
+                    .help(session.id)
+                // Resuming needs the folder, so a deleted one gets no Open.
+                if folder != .missing, let cwd = session.cwd {
+                    Button(action: onOpen) {
+                        HStack(spacing: 4) {
+                            Text("Open")
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 10, weight: .semibold))
+                        }
+                    }
+                    .buttonStyle(PillButtonStyle())
+                    .help("claude --resume in \(cwd)")
+                }
+            }
+        }
+        .transition(.opacity)
     }
 
     /// Always shown once starred; otherwise only on hover, like Open.

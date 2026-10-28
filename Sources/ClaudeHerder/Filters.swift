@@ -11,8 +11,8 @@ enum PeriodPreset: String, CaseIterable, Identifiable {
 }
 
 struct Period: Equatable {
-    var preset: PeriodPreset = .lastWeek
-    var customStart = Calendar.current.date(byAdding: .day, value: -7, to: .now)!
+    var preset: PeriodPreset = .lastMonth
+    var customStart = Calendar.current.date(byAdding: .day, value: -30, to: .now)!
     var customEnd = Date.now
 
     /// Nil means unbounded.

@@ -6,6 +6,9 @@ enum Theme {
     static let surface = Color.white
     static let border = Color(hex: 0xE8E6DC)
     static let borderStrong = Color(hex: 0xC9C6BA)
+    /// Veil over a hovered card: fades its text so the buttons stand out.
+    static let dim = Color.white.opacity(0.85)
+    static let pillGrey = Color(hex: 0xE3E0D5)
     static let ink = Color(hex: 0x141413)
     static let secondary = Color(hex: 0x5E5D59)
     static let tertiary = Color(hex: 0x87867F)
@@ -55,7 +58,7 @@ struct PillButtonStyle: ButtonStyle {
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(
-                (prominent ? Theme.ink : Theme.border).opacity(configuration.isPressed ? 0.75 : 1),
+                (prominent ? Theme.ink : Theme.pillGrey).opacity(configuration.isPressed ? 0.75 : 1),
                 in: Capsule())
     }
 }
