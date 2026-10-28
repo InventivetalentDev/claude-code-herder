@@ -13,6 +13,8 @@ struct SessionCard: View {
     /// The pause between ticking ✓ and the card going away; clicking ✓ again cancels it.
     @State private var finishing: Task<Void, Never>?
 
+    static let height: CGFloat = 244
+
     private static let exactDateStyle = Date.FormatStyle()
         .weekday(.abbreviated).month(.abbreviated).day().hour().minute()
 
@@ -38,10 +40,21 @@ struct SessionCard: View {
                 .lineLimit(2)
                 .fixedSize(horizontal: false, vertical: true)
 
-            summary
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-            Spacer(minLength: 0)
+            // Fills what the title leaves (about 4 lines); overflow fades out instead of "…".
+            // An overlay on flexible space, so long text can't grow the card.
+            Color.clear
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topLeading) {
+                    summary.fixedSize(horizontal: false, vertical: true)
+                }
+                .clipped()
+                .mask {
+                    VStack(spacing: 0) {
+                        Color.black
+                        LinearGradient(colors: [.black, .clear], startPoint: .top, endPoint: .bottom)
+                            .frame(height: 22)
+                    }
+                }
 
             VStack(alignment: .leading, spacing: 3) {
                 // Re-render each minute so "a few min ago" doesn't go stale.
@@ -56,7 +69,8 @@ struct SessionCard: View {
             .opacity(isHovered ? 0 : 1)  // the session ID takes this spot on hover
         }
         .padding(20)
-        .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(height: Self.height)  // every row lines up
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
         .overlay { if isHovered { hoverActions } }
         // Above the dimming, so marking done still works while hovered.
@@ -192,14 +206,14 @@ struct SessionCard: View {
                 .font(.system(size: 14))
                 .foregroundStyle(Theme.secondary)
                 .lineSpacing(3)
-                .lineLimit(5)
+                .lineLimit(8)  // more than fits; just bounds the layout
         } else if let prompt = session.firstPrompt {
             // No recap yet: the opening prompt is the next best description.
             Text(InlineMarkdown.render("“\(prompt)”"))
                 .font(.system(size: 14).italic())
                 .foregroundStyle(Theme.tertiary)
                 .lineSpacing(3)
-                .lineLimit(4)
+                .lineLimit(8)
         }
     }
 
