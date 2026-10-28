@@ -42,6 +42,28 @@ final class HumanTimeTests: XCTestCase {
             HumanTime.span(from: october25, to: october25.addingTimeInterval(600), now: now),
             "October 25")
     }
+
+    func testSameDaySpanNamesTheDayOnce() {
+        let at = { (day: Int, hour: Int, minute: Int) in
+            self.calendar.date(from: DateComponents(year: 2026, month: 10, day: day, hour: hour, minute: minute))!
+        }
+        let clock = { (date: Date) in date.formatted(date: .omitted, time: .shortened) }
+
+        XCTAssertEqual(
+            HumanTime.span(from: at(27, 9, 1), to: at(27, 9, 31), now: now),
+            "today \(clock(at(27, 9, 1))) to \(clock(at(27, 9, 31)))")
+        XCTAssertEqual(
+            HumanTime.span(from: at(26, 12, 1), to: at(26, 12, 31), now: now),
+            "yesterday \(clock(at(26, 12, 1))) to \(clock(at(26, 12, 31)))")
+        // A recent end stays relative.
+        XCTAssertEqual(
+            HumanTime.span(from: at(27, 9, 1), to: at(27, 14, 58), now: now),
+            "today at \(clock(at(27, 9, 1))) to a few min ago")
+        // Different days keep both.
+        XCTAssertEqual(
+            HumanTime.span(from: at(26, 12, 1), to: at(27, 9, 1), now: now),
+            "yesterday at \(clock(at(26, 12, 1))) to today at \(clock(at(27, 9, 1)))")
+    }
 }
 
 final class FolderStateTests: XCTestCase {
