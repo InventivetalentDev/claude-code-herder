@@ -166,7 +166,7 @@ struct ContentView: View {
                         ForEach(sessions.prefix(pageLimit)) { session in
                             SessionCard(
                                 session: session,
-                                hasLiveCow: store.liveCowIDs.contains(session.id),
+                                folder: store.folderStates[session.id] ?? .missing,
                                 isFavorite: store.favoriteIDs.contains(session.id),
                                 onOpen: { open(session) },
                                 onToggleFavorite: { store.toggleFavorite(session.id) }
@@ -222,7 +222,7 @@ struct ContentView: View {
         if favoritesOnly && !store.favoriteIDs.contains(session.id) {
             return false
         }
-        if liveCowsOnly && !store.liveCowIDs.contains(session.id) {
+        if liveCowsOnly && store.folderStates[session.id] != .liveCow {
             return false
         }
         if !ignoresPeriod && !period.contains(session) {

@@ -32,7 +32,7 @@ enum SessionIndexer {
 
     private static let cacheURL = FileManager.default
         .urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("ClaudeHerder/index-v1.json")
+        .appendingPathComponent("ClaudeHerder/index-v3.json")
 
     static func index(root: URL = projectsRoot) -> Result {
         let transcripts: [Transcript]
@@ -74,7 +74,21 @@ enum SessionIndexer {
         } catch {
             allFailures.append(IndexFailure(path: cacheURL.path, message: "\(error)"))
         }
-        return Result(sessions: entries.compactMap { $0?.session }, failures: allFailures)
+        let sessions = deduplicated(entries.compactMap { $0?.session })
+        return Result(sessions: sessions, failures: allFailures)
+    }
+
+    /// Resuming a session in another folder copies its transcript there under the same ID.
+    /// Keep one card per ID: the copy with the latest activity.
+    static func deduplicated(_ sessions: [Session]) -> [Session] {
+        var byID: [String: Session] = [:]
+        for session in sessions {
+            if let existing = byID[session.id], existing.lastAt >= session.lastAt {
+                continue
+            }
+            byID[session.id] = session
+        }
+        return Array(byID.values)
     }
 
     /// Layout: `<root>/<project>/<uuid>.jsonl`, subagents in `<root>/<project>/<uuid>/subagents/`.
@@ -130,9 +144,8 @@ final class SessionStore {
     private(set) var failures: [IndexFailure] = []
     private(set) var isLoading = false
     private(set) var hasLoaded = false
-    /// Sessions whose cow checkout still exists. Not cached: cows get deleted without
-    /// touching the transcript.
-    private(set) var liveCowIDs: Set<String> = []
+    /// Not cached: folders get deleted without touching the transcript.
+    private(set) var folderStates: [String: FolderState] = [:]
     private(set) var favoriteIDs: Set<String>
 
     private static let favoritesKey = "favoriteSessionIDs"
@@ -146,14 +159,14 @@ final class SessionStore {
             return
         }
         isLoading = true
-        let (result, cows) = await Task.detached(priority: .userInitiated) {
+        let (result, states) = await Task.detached(priority: .userInitiated) {
             let result = SessionIndexer.index()
-            let cows = result.sessions.filter { $0.cwd.map(Cows.isInLiveCow) ?? false }.map(\.id)
-            return (result, Set(cows))
+            let states = result.sessions.map { ($0.id, FolderState.of(cwd: $0.cwd)) }
+            return (result, Dictionary(uniqueKeysWithValues: states))
         }.value
         sessions = result.sessions
         failures = result.failures
-        liveCowIDs = cows
+        folderStates = states
         isLoading = false
         hasLoaded = true
     }

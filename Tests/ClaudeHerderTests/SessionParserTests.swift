@@ -34,7 +34,8 @@ final class SessionParserTests: XCTestCase {
             #"{"type":"user","timestamp":"2026-10-01T10:00:07.000Z","message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":"ok"}]}}"#,
             // Tool-only reply: not a message, but billed.
             #"{"type":"assistant","timestamp":"2026-10-01T10:00:08.000Z","message":{"id":"m2","model":"claude-opus-5-5","content":[{"type":"tool_use","id":"t2","name":"Bash","input":{}}],"usage":\#(usage)}}"#,
-            #"{"type":"user","timestamp":"2026-10-01T11:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Thanks"}]}}"#,
+            // Claude cd'd into a subfolder; resuming still needs the starting folder.
+            #"{"type":"user","cwd":"/work/proj/sub","timestamp":"2026-10-01T11:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Thanks"}]}}"#,
             #"{"type":"system","subtype":"away_summary","content":"Fixed the bug. (disable recaps in /config)","timestamp":"2026-10-01T11:30:00.000Z"}"#,
             #"{"type":"ai-title","aiTitle":"Bug fixing"}"#,
             #"{"type":"custom-title","customTitle":"my-bug"}"#,
@@ -100,6 +101,8 @@ final class SessionParserTests: XCTestCase {
             print(s.id, s.projectName, s.title, s.messageCount, s.costUSD ?? -1, s.recap ?? "-")
         }
         XCTAssertEqual(result.failures, [])
+        // Duplicate IDs leave holes in the SwiftUI grid.
+        XCTAssertEqual(Set(result.sessions.map(\.id)).count, result.sessions.count)
         XCTAssertFalse(result.sessions.isEmpty)
     }
 

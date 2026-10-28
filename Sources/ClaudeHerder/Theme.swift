@@ -44,15 +44,19 @@ struct Spark: View {
     }
 }
 
-/// Solid black pill, like the docs' "Open Claude Code" button.
+/// Pill button: solid black like the docs' "Open Claude Code", or grey for secondary actions.
 struct PillButtonStyle: ButtonStyle {
+    var prominent = true
+
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(.white)
+            .foregroundStyle(prominent ? .white : Theme.ink)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
-            .background(Theme.ink.opacity(configuration.isPressed ? 0.75 : 1), in: Capsule())
+            .background(
+                (prominent ? Theme.ink : Theme.border).opacity(configuration.isPressed ? 0.75 : 1),
+                in: Capsule())
     }
 }
 

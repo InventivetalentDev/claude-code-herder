@@ -1,13 +1,15 @@
+import AppKit
 import SwiftUI
 
 struct SessionCard: View {
     let session: Session
-    let hasLiveCow: Bool
+    let folder: FolderState
     let isFavorite: Bool
     let onOpen: () -> Void
     let onToggleFavorite: () -> Void
 
     @State private var isHovered = false
+    @State private var justCopied = false
 
     private static let exactDateStyle = Date.FormatStyle()
         .weekday(.abbreviated).month(.abbreviated).day().hour().minute()
@@ -15,8 +17,13 @@ struct SessionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                if hasLiveCow {
+                switch folder {
+                case .liveCow:
                     Text("🐮").help("Its cow checkout still exists")
+                case .missing:
+                    Text("❌").help("Its folder is gone; copy the ID to continue it elsewhere")
+                case .present:
+                    EmptyView()
                 }
                 Text(session.projectName.uppercased())
                     .font(.system(size: 11, weight: .semibold))
@@ -53,15 +60,23 @@ struct SessionCard: View {
 
                 Spacer()
 
-                Button(action: onOpen) {
-                    HStack(spacing: 4) {
-                        Text("Open")
-                        Image(systemName: "chevron.right").font(.system(size: 10, weight: .semibold))
+                HStack(spacing: 8) {
+                    Button(justCopied ? "Copied" : "Copy ID", action: copyID)
+                        .buttonStyle(PillButtonStyle(prominent: false))
+                        .help(session.id)
+                    // Resuming needs the folder, so a deleted one gets no Open.
+                    if folder != .missing, let cwd = session.cwd {
+                        Button(action: onOpen) {
+                            HStack(spacing: 4) {
+                                Text("Open")
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                        }
+                        .buttonStyle(PillButtonStyle())
+                        .help("claude --resume in \(cwd)")
                     }
                 }
-                .buttonStyle(PillButtonStyle())
-                .disabled(session.cwd == nil)
-                .help(session.cwd.map { "claude --resume in \($0)" } ?? "Unknown folder")
                 .opacity(isHovered ? 1 : 0)
             }
         }
@@ -88,6 +103,16 @@ struct SessionCard: View {
         .buttonStyle(.plain)
         .help(isFavorite ? "Remove from favorites" : "Add to favorites")
         .opacity(isFavorite || isHovered ? 1 : 0)
+    }
+
+    private func copyID() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(session.id, forType: .string)
+        justCopied = true
+        Task {
+            try? await Task.sleep(for: .seconds(1.5))
+            justCopied = false
+        }
     }
 
     @ViewBuilder

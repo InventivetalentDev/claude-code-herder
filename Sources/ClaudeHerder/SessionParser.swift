@@ -137,6 +137,8 @@ private struct Accumulator {
     }
 
     private mutating func touch(_ entry: Entry) {
+        // Later entries follow Claude's `cd`s into subfolders, but `claude --resume` only finds
+        // the session from the folder it started in.
         if cwd == nil {
             cwd = entry.cwd
         }

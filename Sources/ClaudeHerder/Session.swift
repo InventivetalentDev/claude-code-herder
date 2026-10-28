@@ -4,7 +4,7 @@ import Foundation
 struct Session: Codable, Identifiable, Hashable {
     /// The session UUID, as accepted by `claude --resume`.
     let id: String
-    /// Folder the session ran in; `claude --resume` only finds the session from there.
+    /// Folder the session started in; `claude --resume` only finds the session from there.
     let cwd: String?
     let title: String
     /// Latest recap Claude wrote when the user stepped away; nil if it never did.

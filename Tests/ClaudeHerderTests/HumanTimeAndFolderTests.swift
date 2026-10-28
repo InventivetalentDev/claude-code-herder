@@ -44,8 +44,8 @@ final class HumanTimeTests: XCTestCase {
     }
 }
 
-final class CowsTests: XCTestCase {
-    func testDetectsLiveCowFromSubfolder() throws {
+final class FolderStateTests: XCTestCase {
+    func testClassifiesFolders() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let cow = root.appendingPathComponent("cows/feature")
@@ -58,9 +58,30 @@ final class CowsTests: XCTestCase {
         try FileManager.default.createDirectory(
             at: plain.appendingPathComponent(".git"), withIntermediateDirectories: true)
 
-        XCTAssertTrue(Cows.isInLiveCow(cow.path))
-        XCTAssertTrue(Cows.isInLiveCow(cow.appendingPathComponent("tools/sub").path))
-        XCTAssertFalse(Cows.isInLiveCow(plain.path))
-        XCTAssertFalse(Cows.isInLiveCow(root.appendingPathComponent("cows/deleted").path))
+        XCTAssertEqual(FolderState.of(cwd: cow.path), .liveCow)
+        XCTAssertEqual(FolderState.of(cwd: cow.appendingPathComponent("tools/sub").path), .liveCow)
+        XCTAssertEqual(FolderState.of(cwd: plain.path), .present)
+        XCTAssertEqual(FolderState.of(cwd: root.appendingPathComponent("cows/deleted").path), .missing)
+        XCTAssertEqual(FolderState.of(cwd: nil), .missing)
+    }
+}
+
+final class DeduplicationTests: XCTestCase {
+    private func session(_ id: String, cwd: String, lastAt: TimeInterval) -> Session {
+        Session(
+            id: id, cwd: cwd, title: id, recap: nil, firstPrompt: nil,
+            firstAt: Date(timeIntervalSince1970: 0), lastAt: Date(timeIntervalSince1970: lastAt),
+            messageCount: 1, costUSD: nil)
+    }
+
+    func testKeepsLatestCopyOfEachSession() {
+        let sessions = SessionIndexer.deduplicated([
+            session("a", cwd: "/old", lastAt: 10),
+            session("b", cwd: "/b", lastAt: 5),
+            session("a", cwd: "/new", lastAt: 20),
+        ])
+
+        XCTAssertEqual(sessions.map(\.id).sorted(), ["a", "b"])
+        XCTAssertEqual(sessions.first { $0.id == "a" }?.cwd, "/new")
     }
 }
