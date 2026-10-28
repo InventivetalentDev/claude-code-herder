@@ -1,12 +1,22 @@
 # Claude Herder
 
-A Mac app to browse and resume Claude Code sessions, instead of juggling terminal tabs.
+A Mac app to browse, search and resume your Claude Code sessions, instead of juggling terminal tabs.
 
-Reads transcripts from `~/.claude/projects`; **Open** resumes a session in a new Ghostty tab.
+![Claude Herder](docs/screenshot.jpg)
+
+Each session is a card with its title, recap, dates, message count and cost.
+Click one to resume it in a new [Ghostty](https://ghostty.org) tab.
+
+## Build
+
+Needs macOS 14+, Xcode's Swift toolchain, [ripgrep](https://github.com/BurntSushi/ripgrep) for search, and Ghostty.
 
 ```sh
 ./build_app.sh && open ClaudeHerder.app
-swift test   # includes a smoke test that parses every local transcript
 ```
 
-Cost is the Anthropic API list price, so it's an estimate if you're on Bedrock or a subscription.
+Cost is estimated from Anthropic's API list prices.
+
+## License
+
+MIT
