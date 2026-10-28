@@ -146,13 +146,7 @@ final class SessionStore {
     private(set) var hasLoaded = false
     /// Not cached: folders get deleted without touching the transcript.
     private(set) var folderStates: [String: FolderState] = [:]
-    private(set) var favoriteIDs: Set<String>
-
-    private static let favoritesKey = "favoriteSessionIDs"
-
-    init() {
-        favoriteIDs = Set(UserDefaults.standard.stringArray(forKey: Self.favoritesKey) ?? [])
-    }
+    private(set) var done = DoneMarks.load()
 
     func reload() async {
         guard !isLoading else {
@@ -171,10 +165,8 @@ final class SessionStore {
         hasLoaded = true
     }
 
-    func toggleFavorite(_ id: String) {
-        if favoriteIDs.remove(id) == nil {
-            favoriteIDs.insert(id)
-        }
-        UserDefaults.standard.set(favoriteIDs.sorted(), forKey: Self.favoritesKey)
+    func toggleDone(_ session: Session) {
+        done.toggle(session)
+        done.save()
     }
 }

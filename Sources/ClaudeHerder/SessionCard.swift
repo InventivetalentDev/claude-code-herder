@@ -4,9 +4,9 @@ import SwiftUI
 struct SessionCard: View {
     let session: Session
     let folder: FolderState
-    let isFavorite: Bool
+    let isDone: Bool
     let onOpen: () -> Void
-    let onToggleFavorite: () -> Void
+    let onToggleDone: () -> Void
 
     @State private var isHovered = false
     @State private var justCopied = false
@@ -57,9 +57,9 @@ struct SessionCard: View {
         .frame(maxWidth: .infinity, minHeight: 220, alignment: .topLeading)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
         .overlay { if isHovered { hoverActions } }
-        // Above the dimming, so starring still works while hovered.
+        // Above the dimming, so marking done still works while hovered.
         .overlay(alignment: .topTrailing) {
-            favoriteButton.frame(height: 16).padding(20)
+            doneButton.frame(height: 16).padding(20)
         }
         // Clicking anywhere opens; the buttons above handle their own clicks.
         .contentShape(RoundedRectangle(cornerRadius: 14))
@@ -125,16 +125,16 @@ struct SessionCard: View {
         .transition(.opacity)
     }
 
-    /// Always shown once starred; otherwise only on hover, like Open.
-    private var favoriteButton: some View {
-        Button(action: onToggleFavorite) {
-            Text(isFavorite ? "★" : "☆")
-                .font(.system(size: 16))
-                .foregroundStyle(isFavorite ? Theme.clay : Theme.tertiary)
+    /// Always shown on done cards; otherwise only on hover, like Open.
+    private var doneButton: some View {
+        Button(action: onToggleDone) {
+            Image(systemName: isDone ? "checkmark.circle.fill" : "checkmark.circle")
+                .font(.system(size: 17))
+                .foregroundStyle(isDone ? Theme.clay : Theme.tertiary)
         }
         .buttonStyle(.plain)
-        .help(isFavorite ? "Remove from favorites" : "Add to favorites")
-        .opacity(isFavorite || isHovered ? 1 : 0)
+        .help(isDone ? "Mark as not done" : "Mark as done")
+        .opacity(isDone || isHovered ? 1 : 0)
     }
 
     private func copyID() {

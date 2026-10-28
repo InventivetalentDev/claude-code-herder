@@ -12,7 +12,7 @@ struct ContentView: View {
     @State private var pageLimit = ContentView.pageSize
     @State private var errorMessage: String?
     @State private var showingPeriod = false
-    @State private var favoritesOnly = false
+    @State private var doneOnly = false
     @State private var liveCowsOnly = false
 
     private static let pageSize = 40
@@ -43,7 +43,7 @@ struct ContentView: View {
     private var header: some View {
         HStack(spacing: 14) {
             Spark(size: 22)
-            Text("Claude Herder")
+            Text("Claude Code Herder")
                 .font(Theme.serif(26))
                 .foregroundStyle(Theme.ink)
                 .fixedSize()
@@ -52,7 +52,8 @@ struct ContentView: View {
 
             searchField.frame(maxWidth: 360)
             periodButton
-            FilterChip(label: "★ Favorites", isOn: $favoritesOnly)
+            FilterChip(label: "✓ Done", isOn: $doneOnly)
+                .help("Show only sessions marked as done")
             FilterChip(label: "🐮 Active", isOn: $liveCowsOnly)
                 .help("Sessions whose cow checkout still exists")
             sortMenu
@@ -110,7 +111,7 @@ struct ContentView: View {
         .buttonStyle(.plain)
         .disabled(ignoresPeriod)
         .opacity(ignoresPeriod ? 0.45 : 1)
-        .help(ignoresPeriod ? "Favorites and active cows show regardless of period" : "")
+        .help(ignoresPeriod ? "Done and active cow sessions show regardless of period" : "")
         .popover(isPresented: $showingPeriod, arrowEdge: .bottom) {
             PeriodPicker(period: $period)
         }
@@ -167,9 +168,9 @@ struct ContentView: View {
                             SessionCard(
                                 session: session,
                                 folder: store.folderStates[session.id] ?? .missing,
-                                isFavorite: store.favoriteIDs.contains(session.id),
+                                isDone: store.done.isDone(session),
                                 onOpen: { open(session) },
-                                onToggleFavorite: { store.toggleFavorite(session.id) }
+                                onToggleDone: { store.toggleDone(session) }
                             )
                         }
                     }
@@ -213,13 +214,14 @@ struct ContentView: View {
 
     // MARK: Logic
 
-    /// Favorites and live cows are things you come back to, so their age doesn't matter.
+    /// The done pile and live cows are browsed as a whole, so their age doesn't matter.
     private var ignoresPeriod: Bool {
-        favoritesOnly || liveCowsOnly
+        doneOnly || liveCowsOnly
     }
 
     private func isVisible(_ session: Session) -> Bool {
-        if favoritesOnly && !store.favoriteIDs.contains(session.id) {
+        // Done sessions are hidden unless the Done chip asks for exactly them.
+        if store.done.isDone(session) != doneOnly {
             return false
         }
         if liveCowsOnly && store.folderStates[session.id] != .liveCow {
@@ -235,8 +237,8 @@ struct ContentView: View {
         if !query.isEmpty {
             return "No sessions match “\(query)”."
         }
-        if favoritesOnly && store.favoriteIDs.isEmpty {
-            return "No favorites yet. Hover a card and click ☆."
+        if doneOnly {
+            return "Nothing done yet. Hover a card and click ✓ to mark it done."
         }
         return ignoresPeriod ? "No sessions here." : "No sessions in this period."
     }
@@ -254,7 +256,7 @@ struct ContentView: View {
 
     /// Anything that changes which sessions show resets the scroll page.
     private var filterKey: [AnyHashable] {
-        [query, period.label, sortKey, sortDescending, favoritesOnly, liveCowsOnly]
+        [query, period.label, sortKey, sortDescending, doneOnly, liveCowsOnly]
     }
 
     private func runSearch() async {
