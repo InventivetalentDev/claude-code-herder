@@ -17,19 +17,15 @@ struct SessionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                switch folder {
-                case .liveCow:
+                if folder == .liveCow {
                     Text("🐮").help("Its cow checkout still exists")
-                case .missing:
-                    Text("❌").help("Its folder is gone; copy the ID to continue it elsewhere")
-                case .present:
-                    EmptyView()
                 }
                 Text(session.projectName.uppercased())
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.6)
-                    .foregroundStyle(Theme.secondary)
+                    .foregroundStyle(folder == .missing ? Theme.deletedRed : Theme.secondary)
                     .lineLimit(1)
+                    .help(folder == .missing ? "Folder deleted; copy the ID to continue it elsewhere" : "")
             }
             .frame(height: 16)
             .padding(.trailing, 24)  // room for the star overlay

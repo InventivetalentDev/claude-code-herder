@@ -13,6 +13,8 @@ enum Theme {
     static let secondary = Color(hex: 0x5E5D59)
     static let tertiary = Color(hex: 0x87867F)
     static let clay = Color(hex: 0xD97757)
+    /// Muted brick red for folders that no longer exist.
+    static let deletedRed = Color(hex: 0x9E3B2C)
 
     static func serif(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
         .system(size: size, weight: weight, design: .serif)
