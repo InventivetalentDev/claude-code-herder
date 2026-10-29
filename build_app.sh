@@ -25,7 +25,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key><string>Claude Code Herder</string>
-    <key>CFBundleIdentifier</key><string>com.tomcc.claude-herder</string>
+    <key>CFBundleIdentifier</key><string>org.inventivetalent.claude-herder</string>
     <key>CFBundleExecutable</key><string>ClaudeHerder</string>
     <key>CFBundlePackageType</key><string>APPL</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
@@ -33,7 +33,7 @@ cat > "$app/Contents/Info.plist" <<PLIST
     <key>LSMinimumSystemVersion</key><string>14.0</string>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Claude Code Herder opens sessions in new Ghostty tabs.</string>
+    <string>Claude Code Herder opens and finds sessions in iTerm2 tabs.</string>
 </dict>
 </plist>
 PLIST

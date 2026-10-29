@@ -23,6 +23,12 @@ enum Theme {
     }
 }
 
+extension Profile {
+    var tint: Color {
+        Color(hex: color)
+    }
+}
+
 extension Color {
     init(hex: UInt32) {
         self.init(

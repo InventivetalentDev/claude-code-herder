@@ -1,19 +1,32 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
-/// Workspace → (branch name, for a new cow) → first message → a new Ghostty tab.
+/// Folder → profile and first message → a new iTerm2 tab.
 struct NewSessionWizard: View {
-    let cows: [URL]
-    let onStart: (Workspace, _ name: String, _ prompt: String) -> Void
+    let recentFolders: [URL]
+    let profiles: [Profile]
+    let onStart: (_ folder: URL, _ profile: Profile, _ prompt: String) -> Void
 
     @Environment(\.dismiss) private var dismiss
-    @State private var step = Step.workspace
-    @State private var workspace = Workspace.newCow
-    @State private var name = ""
+    /// The last profile picked, by ID.
+    @AppStorage("newSessionProfile") private var profileID = ""
+    @State private var step = Step.folder
+    @State private var folder: URL?
+    /// Picked with "Choose another folder…"; listed above the recent ones.
+    @State private var pickedFolder: URL?
+    @State private var choosingFolder = false
     @State private var prompt = ""
     @FocusState private var focused: Bool
 
     enum Step {
-        case workspace, branch, message
+        case folder, message
+    }
+
+    init(recentFolders: [URL], profiles: [Profile], onStart: @escaping (URL, Profile, String) -> Void) {
+        self.recentFolders = recentFolders
+        self.profiles = profiles
+        self.onStart = onStart
+        _folder = State(initialValue: recentFolders.first)
     }
 
     var body: some View {
@@ -32,64 +45,78 @@ struct NewSessionWizard: View {
 
     private var title: String {
         switch step {
-        case .workspace: "Where should it run?"
-        case .branch: "Name the branch"
-        case .message: "What should Claude do?"
+        case .folder: "Where should it run?"
+        case .message: "What should \(profile?.isClaude == false ? "Codex" : "Claude") do?"
         }
+    }
+
+    /// Falls back to the first profile when the remembered one is gone from the config.
+    private var profile: Profile? {
+        profiles.first { $0.id == profileID } ?? profiles.first
+    }
+
+    private var folders: [URL] {
+        (pickedFolder.map { [$0] } ?? []) + recentFolders.filter { $0 != pickedFolder }
     }
 
     @ViewBuilder
     private var page: some View {
         switch step {
-        case .workspace:
+        case .folder:
             ScrollView {
                 VStack(spacing: 8) {
-                    option(.newCow, "New cow", detail: "A fresh copy-on-write checkout")
-                    option(.repo, NewSession.repo.lastPathComponent, detail: "The repo itself")
-                    ForEach(cows, id: \.self) { cow in
-                        option(.cow(cow), "🐮 \(cow.lastPathComponent)", detail: "Existing cow")
+                    ForEach(folders, id: \.self) { url in
+                        option(url)
                     }
+                    Button("Choose another folder…") { choosingFolder = true }
+                        .buttonStyle(PillButtonStyle(prominent: false))
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-        case .branch:
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 0) {
-                    Text(NewSession.branchPrefix).foregroundStyle(Theme.tertiary)
-                    TextField("my-feature", text: $name)
-                        .textFieldStyle(.plain)
-                        .foregroundStyle(Theme.ink)
-                        .focused($focused)
+            .fileImporter(isPresented: $choosingFolder, allowedContentTypes: [.folder]) { result in
+                if case .success(let url) = result {
+                    pickedFolder = url
+                    folder = url
                 }
-                .font(.system(size: 15, design: .monospaced))
-                .outlinedControl()
-                Text(nameProblem ?? "Cloned into cows/\(NewSession.folderName(for: name))")
-                    .font(.system(size: 12))
-                    .foregroundStyle(nameProblem == nil ? Theme.tertiary : Theme.deletedRed)
-                    .opacity(name.isEmpty ? 0 : 1)
             }
-            .onAppear { focused = true }
         case .message:
-            TextEditor(text: $prompt)
-                .font(.system(size: 14))
-                .foregroundStyle(Theme.ink)
-                .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
-                .focused($focused)
-                .onAppear { focused = true }
+            VStack(alignment: .leading, spacing: 12) {
+                Picker("Profile", selection: Binding(get: { profile?.id ?? "" }, set: { profileID = $0 })) {
+                    ForEach(profiles) { Text($0.label).tag($0.id) }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                TextEditor(text: $prompt)
+                    .font(.system(size: 14))
+                    .foregroundStyle(Theme.ink)
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.border))
+                    .focused($focused)
+                    .onAppear { focused = true }
+                Text("In \(folder.map(Self.abbreviated) ?? "")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
         }
     }
 
-    private func option(_ choice: Workspace, _ label: String, detail: String) -> some View {
-        let selected = workspace == choice
+    private func option(_ url: URL) -> some View {
+        let selected = folder == url
         return Button {
-            workspace = choice
+            folder = url
         } label: {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(label).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
-                    Text(detail).font(.system(size: 12)).foregroundStyle(Theme.tertiary)
+                    Text(url.lastPathComponent).font(.system(size: 14, weight: .medium)).foregroundStyle(Theme.ink)
+                    Text(Self.abbreviated(url))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Theme.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
                 Spacer()
                 Image(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -109,12 +136,12 @@ struct NewSessionWizard: View {
 
     private var buttons: some View {
         HStack {
-            if step == .workspace {
+            if step == .folder {
                 Button("Cancel") { dismiss() }
                     .buttonStyle(PillButtonStyle(prominent: false))
                     .keyboardShortcut(.cancelAction)
             } else {
-                Button("Back", action: goBack)
+                Button("Back") { step = .folder }
                     .buttonStyle(PillButtonStyle(prominent: false))
                     .keyboardShortcut(.cancelAction)
             }
@@ -124,49 +151,38 @@ struct NewSessionWizard: View {
                 Button("Start Session", action: start)
                     .buttonStyle(PillButtonStyle())
                     .keyboardShortcut(.return, modifiers: .command)
-                    .disabled(trimmedPrompt.isEmpty)
-                    .opacity(trimmedPrompt.isEmpty ? 0.4 : 1)
+                    .disabled(!canStart)
+                    .opacity(canStart ? 1 : 0.4)
                     .help("⌘↩")
             } else {
-                Button("Next", action: goNext)
+                Button("Next") { step = .message }
                     .buttonStyle(PillButtonStyle())
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!canGoNext)
-                    .opacity(canGoNext ? 1 : 0.4)
+                    .disabled(folder == nil)
+                    .opacity(folder == nil ? 0.4 : 1)
             }
         }
-    }
-
-    private var nameProblem: String? {
-        NewSession.problem(withName: name, existing: cows)
     }
 
     private var trimmedPrompt: String {
         prompt.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var canGoNext: Bool {
-        step != .branch || (!name.isEmpty && nameProblem == nil)
-    }
-
-    private func goNext() {
-        switch step {
-        case .workspace: step = workspace == .newCow ? .branch : .message
-        case .branch: step = .message
-        case .message: break
-        }
-    }
-
-    private func goBack() {
-        switch step {
-        case .workspace: break
-        case .branch: step = .workspace
-        case .message: step = workspace == .newCow ? .branch : .workspace
-        }
+    private var canStart: Bool {
+        !trimmedPrompt.isEmpty && profile != nil
     }
 
     private func start() {
-        onStart(workspace, name, trimmedPrompt)
+        guard let folder, let profile else {
+            return
+        }
+        onStart(folder, profile, trimmedPrompt)
         dismiss()
+    }
+
+    /// `~/Projects/x` rather than `/Users/me/Projects/x`.
+    private static func abbreviated(_ url: URL) -> String {
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        return url.path.hasPrefix(home + "/") ? "~" + url.path.dropFirst(home.count) : url.path
     }
 }

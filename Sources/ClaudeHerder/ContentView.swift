@@ -11,13 +11,12 @@ struct ContentView: View {
     @State private var sortDescending = true
     @State private var pageLimit = ContentView.pageSize
     @State private var errorMessage: String?
-    @State private var cowOffer: CowOffer?
-    @State private var deletingCow: String?
     @State private var showingPeriod = false
     @State private var showDone = false
-    @State private var liveCowsOnly = false
-    /// Non-nil while the new-session wizard is up; holds the cows it offers.
-    @State private var newSessionCows: CowList?
+    /// Nil shows every profile. An ID, so the filter survives the config being reloaded.
+    @State private var profileFilterID: String?
+    /// Non-nil while the new-session wizard is up; holds the folders it offers.
+    @State private var newSessionChoices: NewSessionChoices?
 
     private static let pageSize = 40
 
@@ -43,18 +42,9 @@ struct ContentView: View {
         }
         .task(id: query) { await runSearch() }
         .onChange(of: filterKey) { pageLimit = Self.pageSize }
-        .alert(
-            cowOffer.map { "Delete the \($0.status.root.lastPathComponent) cow?" } ?? "",
-            isPresented: Binding(get: { cowOffer != nil }, set: { if !$0 { cowOffer = nil } }),
-            presenting: cowOffer
-        ) { offer in
-            Button("Delete cow", role: .destructive) { deleteCow(offer.status.root) }
-            Button("Keep", role: .cancel) {}
-        } message: { offer in
-            Text(offer.message)
-        }
-        .sheet(item: $newSessionCows) { cows in
-            NewSessionWizard(cows: cows.urls, onStart: startSession)
+        .sheet(item: $newSessionChoices) { choices in
+            NewSessionWizard(
+                recentFolders: choices.folders, profiles: choices.profiles, onStart: startSession)
         }
         .alert("Something went wrong", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -79,8 +69,7 @@ struct ContentView: View {
             periodButton
             FilterChip(label: "✓ Show done", isOn: $showDone)
                 .help("Also show sessions marked as done")
-            FilterChip(label: "🐮 Active", isOn: $liveCowsOnly)
-                .help("Sessions whose cow checkout still exists")
+            profileMenu
             sortMenu
 
             Button {
@@ -148,12 +137,31 @@ struct ContentView: View {
             .outlinedControl()
         }
         .buttonStyle(.plain)
-        .disabled(ignoresPeriod)
-        .opacity(ignoresPeriod ? 0.45 : 1)
-        .help(ignoresPeriod ? "Active cow sessions show regardless of period" : "")
         .popover(isPresented: $showingPeriod, arrowEdge: .bottom) {
             PeriodPicker(period: $period)
         }
+    }
+
+    /// Nil when the chosen profile is gone from the config.
+    private var profileFilter: Profile? {
+        store.profiles.first { $0.id == profileFilterID }
+    }
+
+    private var profileMenu: some View {
+        Menu {
+            Picker("Profile", selection: $profileFilterID) {
+                Text("All profiles").tag(String?.none)
+                ForEach(store.profiles) { Text($0.label).tag(String?.some($0.id)) }
+            }
+            .pickerStyle(.inline)
+        } label: {
+            Text(profileFilter?.label ?? "All profiles").font(.system(size: 13)).fixedSize()
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .foregroundStyle(Theme.ink)
+        .outlinedControl()
+        .help("Show one profile's sessions")
     }
 
     private var sortMenu: some View {
@@ -210,7 +218,6 @@ struct ContentView: View {
                                 isDone: store.done.isDone(session),
                                 isOpen: store.openPIDs[session.id] != nil,
                                 onOpen: { open(session) },
-                                onFork: { fork(session) },
                                 onToggleDone: {
                                     withAnimation(.easeInOut(duration: 0.35)) {
                                         store.toggleDone(session)
@@ -242,10 +249,6 @@ struct ContentView: View {
                 Text("·")
                 Text(cost.formatted(.currency(code: "USD")))
             }
-            if let deletingCow {
-                Text("·")
-                Text("Deleting the \(deletingCow) cow…")
-            }
             if !store.failures.isEmpty {
                 Text("·")
                 Button("\(store.failures.count) files failed to load") {
@@ -265,19 +268,14 @@ struct ContentView: View {
 
     // MARK: Logic
 
-    /// Live cows are browsed as a whole, so their age doesn't matter.
-    private var ignoresPeriod: Bool {
-        liveCowsOnly
-    }
-
     private func isVisible(_ session: Session) -> Bool {
         if !showDone && store.done.isDone(session) {
             return false
         }
-        if liveCowsOnly && store.folderStates[session.id] != .liveCow {
+        if let profileFilter, session.profile.id != profileFilter.id {
             return false
         }
-        if !ignoresPeriod && !period.contains(session) {
+        if !period.contains(session) {
             return false
         }
         return searchMatches?.contains(session.id) ?? true
@@ -287,8 +285,7 @@ struct ContentView: View {
         if !query.isEmpty {
             return "No sessions match “\(query)”."
         }
-        let scope = ignoresPeriod ? "here" : "in this period"
-        return showDone ? "No sessions \(scope)." : "Nothing left to do \(scope)."
+        return showDone ? "No sessions in this period." : "Nothing left to do in this period."
     }
 
     private var visibleSessions: [Session] {
@@ -304,7 +301,7 @@ struct ContentView: View {
 
     /// Anything that changes which sessions show resets the scroll page.
     private var filterKey: [AnyHashable] {
-        [query, period.label, sortKey, sortDescending, showDone, liveCowsOnly]
+        [query, period.label, sortKey, sortDescending, showDone, profileFilterID]
     }
 
     private func runSearch() async {
@@ -323,7 +320,8 @@ struct ContentView: View {
         defer { isSearching = false }
         do {
             let ids = try await TranscriptSearch.sessionIDs(
-                matching: trimmed, in: SessionIndexer.projectsRoot)
+                matching: trimmed, in: store.profiles.flatMap(\.transcriptRoots),
+                codexParents: store.codexParents)
             guard !Task.isCancelled else {
                 return
             }
@@ -333,75 +331,29 @@ struct ContentView: View {
         }
     }
 
-    /// A session just marked done: close its tab, then maybe offer to delete its cow.
+    /// A session just marked done: close its tab if it's running.
     private func finish(_ session: Session) {
-        guard store.done.isDone(session) else {
+        guard store.done.isDone(session), let pid = store.openPIDs[session.id] else {
             return
         }
         Task {
             do {
-                if let pid = store.openPIDs[session.id] {
-                    try await Ghostty.close(pid: pid)
-                    await store.refreshOpenSessions()
-                }
-                try await offerCowCleanup(after: session)
+                try await ITerm.close(pid: pid)
+                await store.refreshOpenSessions()
             } catch {
                 errorMessage = error.localizedDescription
             }
-        }
-    }
-
-    /// Once every session in a cow is done, offer to free its disk space.
-    private func offerCowCleanup(after session: Session) async throws {
-        guard let cwd = session.cwd, let root = Cows.root(containing: cwd) else {
-            return
-        }
-        let inCow = Cows.sessions(in: root, among: store.sessions)
-        guard inCow.allSatisfy(store.done.isDone) else {
-            return
-        }
-        let running = inCow.filter { store.openPIDs[$0.id] != nil }.count
-        cowOffer = CowOffer(status: try await Cows.status(of: root), runningSessions: running)
-    }
-
-    private func deleteCow(_ root: URL) {
-        deletingCow = root.lastPathComponent
-        Task {
-            do {
-                try await Cows.delete(root)
-                await store.reload()
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-            deletingCow = nil
         }
     }
 
     private func showNewSession() {
-        do {
-            newSessionCows = CowList(urls: try NewSession.cows(of: NewSession.repo))
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        newSessionChoices = NewSessionChoices(folders: store.recentFolders(), profiles: store.profiles)
     }
 
-    private func startSession(_ workspace: Workspace, name: String, prompt: String) {
+    private func startSession(in folder: URL, profile: Profile, prompt: String) {
         Task {
             do {
-                try await NewSession.start(workspace, name: name, prompt: prompt)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
-    }
-
-    private func fork(_ session: Session) {
-        guard let cwd = session.cwd else {
-            return
-        }
-        Task {
-            do {
-                try await ForkApp.open(cwd)
+                try await NewSession.start(in: folder, profile: profile, prompt: prompt)
             } catch {
                 errorMessage = error.localizedDescription
             }
@@ -415,9 +367,9 @@ struct ContentView: View {
         Task {
             do {
                 if let pid {
-                    try await Ghostty.focus(pid: pid)
+                    try await ITerm.focus(pid: pid)
                 } else if let cwd {
-                    try await Ghostty.resume(sessionID: session.id, in: cwd)
+                    try await ITerm.resume(session, in: cwd)
                 }
             } catch {
                 errorMessage = error.localizedDescription
@@ -499,33 +451,9 @@ private struct FilterChip: View {
     }
 }
 
-/// The prompt shown once the last session in a cow is marked done.
-private struct CowOffer {
-    let status: Cows.Status
-    let runningSessions: Int
-
-    var message: String {
-        var lines = [
-            "All its sessions are done.",
-            "\(status.root.path) (branch \(status.branch))",
-        ]
-        var warnings: [String] = []
-        if status.uncommittedFiles > 0 {
-            warnings.append("⚠️ \(status.uncommittedFiles) uncommitted file(s) will be lost")
-        }
-        if status.unpushedCommits > 0 {
-            warnings.append("⚠️ \(status.unpushedCommits) commit(s) not pushed anywhere will be lost")
-        }
-        if runningSessions > 0 {
-            warnings.append("⚠️ \(runningSessions) session(s) still running there; close the tab first")
-        }
-        lines.append(warnings.isEmpty ? "Everything is committed and pushed." : warnings.joined(separator: "\n"))
-        return lines.joined(separator: "\n\n")
-    }
-}
-
-/// The cows the new-session wizard offers, taken when it opens.
-private struct CowList: Identifiable {
+/// What the new-session wizard offers, taken when it opens.
+private struct NewSessionChoices: Identifiable {
     let id = UUID()
-    let urls: [URL]
+    let folders: [URL]
+    let profiles: [Profile]
 }

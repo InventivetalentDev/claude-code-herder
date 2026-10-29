@@ -14,73 +14,59 @@ final class NewSessionTests: XCTestCase {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    private func makeFolder(_ path: String, cowSource: URL? = nil) throws -> URL {
-        let folder = dir.appendingPathComponent(path)
-        try FileManager.default.createDirectory(
-            at: folder.appendingPathComponent(".git"), withIntermediateDirectories: true)
-        if let cowSource {
-            let marker = folder.appendingPathComponent(".git/cow-source")
-            try (cowSource.path + "\n").write(to: marker, atomically: true, encoding: .utf8)
-        }
-        return folder
+    /// Default commands, as the config gives them when an entry sets no `command`.
+    private func profiles(home: URL) throws -> [Profile] {
+        try ProfileConfig.profiles(
+            from: [
+                .init(label: "Personal", dir: "~/.claude"),
+                .init(label: "Work", dir: "~/my 'claude'"),
+                .init(label: "Codex", dir: "~/.codex", tool: .codex),
+                .init(label: "Codex 2", dir: "/opt/codex", tool: .codex),
+            ], home: home)
     }
 
-    func testListsOnlyCowsOfThisRepo() throws {
-        let repo = try makeFolder("repo")
-        let other = try makeFolder("other")
-        let b = try makeFolder("cows/tommo-b", cowSource: repo)
-        let a = try makeFolder("cows/tommo-a", cowSource: repo)
-        _ = try makeFolder("cows/tommo-other", cowSource: other)
-        _ = try makeFolder("cows/plain-clone")
+    func testResumeCommands() throws {
+        let commands = try profiles(home: URL(fileURLWithPath: "/Users/me"))
+            .map { $0.resumeCommand(sessionID: "abc") }
 
-        let cows = try NewSession.cows(of: repo)
-
-        XCTAssertEqual(cows.map(\.lastPathComponent), [a, b].map(\.lastPathComponent))
+        XCTAssertEqual(commands, [
+            "claude --resume abc",
+            #"CLAUDE_CONFIG_DIR='/Users/me/my '\''claude'\''' claude --resume abc"#,
+            "codex resume abc",
+            "CODEX_HOME='/opt/codex' codex resume abc",
+        ])
     }
 
-    func testNoCowsFolderMeansNoCows() throws {
-        XCTAssertEqual(try NewSession.cows(of: try makeFolder("repo")), [])
-    }
-
-    func testNameRules() {
-        let existing = [URL(fileURLWithPath: "/x/cows/tommo-store")]
-        XCTAssertNil(NewSession.problem(withName: "", existing: existing))
-        XCTAssertNil(NewSession.problem(withName: "new-thing_2.0", existing: existing))
-        XCTAssertNotNil(NewSession.problem(withName: "store", existing: existing))
-        for bad in ["a b", "a/b", "Caps", "-flag", "a..b", "x'y", "é"] {
-            XCTAssertNotNil(NewSession.problem(withName: bad, existing: existing), bad)
-        }
-        XCTAssertEqual(NewSession.folderName(for: "store"), "tommo-store")
-    }
-
-    func testNewCowRunsCowFromTheRepo() {
-        let (directory, input) = NewSession.command(
-            for: .newCow, name: "thing", promptFile: URL(fileURLWithPath: "/tmp/p.txt"))
-        XCTAssertEqual(directory, NewSession.repo)
-        XCTAssertTrue(input.hasPrefix("cow 'tommo/thing' && "), input)
-    }
-
-    /// Runs the typed line in a real zsh with `claude` stubbed out, as Ghostty would.
-    func testPromptReachesClaudeIntact() throws {
-        let prompt = "Fix the \"quote\" bug, it's $HOME and `ls`\nsecond line"
+    /// Runs the typed line in a real zsh with `claude` and `codex` stubbed out, as iTerm2
+    /// would, and records what each received.
+    private func runTypedLine(for profile: Profile, prompt: String) throws -> String {
         let promptFile = dir.appendingPathComponent("prompt.txt")
         try prompt.write(to: promptFile, atomically: true, encoding: .utf8)
-        let cow = try makeFolder("cows/tommo-x", cowSource: dir)
         let received = dir.appendingPathComponent("received.txt")
-
-        let (directory, input) = NewSession.command(
-            for: .cow(cow), name: "", promptFile: promptFile)
-        let stub = "claude() { print -rn -- \"$1\" > \(NewSession.shellQuoted(received.path)) }"
+        let out = NewSession.shellQuoted(received.path)
+        let stubs = """
+            claude() { print -rn -- "config=$CLAUDE_CONFIG_DIR claude:$1" > \(out) }
+            codex() { print -rn -- "codex:$1" > \(out) }
+            """
         let zsh = Process()
         zsh.executableURL = URL(fileURLWithPath: "/bin/zsh")
-        zsh.arguments = ["-f", "-c", "\(stub); \(input)"]
-        zsh.currentDirectoryURL = directory
+        zsh.arguments = ["-f", "-c", "\(stubs)\nunset CLAUDE_CONFIG_DIR\n\(NewSession.command(for: profile, promptFile: promptFile))"]
         try zsh.run()
         zsh.waitUntilExit()
 
         XCTAssertEqual(zsh.terminationStatus, 0)
-        XCTAssertEqual(try String(contentsOf: received, encoding: .utf8), prompt)
         XCTAssertFalse(
             FileManager.default.fileExists(atPath: promptFile.path), "prompt file left behind")
+        return try String(contentsOf: received, encoding: .utf8)
+    }
+
+    func testPromptReachesEachToolIntact() throws {
+        let prompt = "Fix the \"quote\" bug, it's $HOME and `ls`\nsecond line"
+        let profiles = try profiles(home: URL(fileURLWithPath: "/Users/me"))
+
+        XCTAssertEqual(try runTypedLine(for: profiles[0], prompt: prompt), "config= claude:\(prompt)")
+        XCTAssertEqual(
+            try runTypedLine(for: profiles[1], prompt: prompt), "config=/Users/me/my 'claude' claude:\(prompt)")
+        XCTAssertEqual(try runTypedLine(for: profiles[2], prompt: prompt), "codex:\(prompt)")
     }
 }

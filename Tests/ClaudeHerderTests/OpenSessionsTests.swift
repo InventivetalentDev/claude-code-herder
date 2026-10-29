@@ -34,7 +34,18 @@ final class OpenSessionsTests: XCTestCase {
         try register("dead", pid: 999_999, startedAt: .now)
         try "secret".write(to: dir.appendingPathComponent("1.abc.key"), atomically: true, encoding: .utf8)
 
-        let result = OpenSessions.scan(dir)
+        let result = OpenSessions.scan([dir])
+
+        XCTAssertEqual(result.failures, [])
+        XCTAssertEqual(result.pids, ["live": me])
+    }
+
+    /// One registry per Claude profile; a profile that never ran has none yet.
+    func testMergesProfilesAndSkipsMissingRegistries() throws {
+        let me = getpid()
+        try register("live", pid: me, startedAt: processStart(me))
+
+        let result = OpenSessions.scan([dir, dir.appendingPathComponent("never-ran")])
 
         XCTAssertEqual(result.failures, [])
         XCTAssertEqual(result.pids, ["live": me])
@@ -46,9 +57,19 @@ final class OpenSessionsRealTests: XCTestCase {
     func testFindsThisSession() throws {
         let sessionID = try XCTUnwrap(ProcessInfo.processInfo.environment["CLAUDE_CODE_SESSION_ID"])
 
-        let result = OpenSessions.scan()
+        let result = OpenSessions.scan(ProfileConfig.load().profiles.compactMap(\.registry))
 
         XCTAssertEqual(result.failures, [])
         XCTAssertNotNil(result.pids[sessionID])
+    }
+
+    /// iTerm2 finds a session's tab by the terminal its Claude process runs on.
+    func testFindsThisSessionsTerminal() throws {
+        let sessionID = try XCTUnwrap(ProcessInfo.processInfo.environment["CLAUDE_CODE_SESSION_ID"])
+        let registries = ProfileConfig.load().profiles.compactMap(\.registry)
+        let pid = try XCTUnwrap(OpenSessions.scan(registries).pids[sessionID])
+
+        XCTAssertTrue(try ITerm.tty(of: pid).hasPrefix("/dev/ttys"))
+        XCTAssertThrowsError(try ITerm.tty(of: 999_999))
     }
 }

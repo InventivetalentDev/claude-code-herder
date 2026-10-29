@@ -8,7 +8,6 @@ struct SessionCard: View {
     /// Running in a terminal tab right now, so opening it again would make a duplicate.
     let isOpen: Bool
     let onOpen: () -> Void
-    let onFork: () -> Void
     let onToggleDone: () -> Void
 
     @State private var isHovered = false
@@ -24,9 +23,7 @@ struct SessionCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 6) {
-                if folder == .liveCow {
-                    Text("🐮").help("Its cow checkout still exists")
-                }
+                ProfileBadge(profile: session.profile)
                 Text(session.projectName.uppercased())
                     .font(.system(size: 11, weight: .semibold))
                     .tracking(0.6)
@@ -110,17 +107,6 @@ struct SessionCard: View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 14).fill(Theme.dim)
             HStack(spacing: 8) {
-                if folder != .missing && session.cwd != nil {
-                    Button(action: onFork) {
-                        HStack(spacing: 4) {
-                            Text("Fork")
-                            Image(systemName: "arrow.up.forward.app")
-                                .font(.system(size: 11, weight: .medium))
-                        }
-                    }
-                    .buttonStyle(PillButtonStyle(prominent: false))
-                    .help("Review the changes in Fork")
-                }
                 if canOpen {
                     Button(action: onOpen) {
                         HStack(spacing: 4) {
@@ -130,7 +116,7 @@ struct SessionCard: View {
                         }
                     }
                     .buttonStyle(PillButtonStyle())
-                    .help(isOpen ? "Already running; jump to its tab" : "claude --resume in \(session.cwd ?? "")")
+                    .help(isOpen ? "Already running; jump to its tab" : resumeHelp)
                 } else {
                     Text("Folder deleted")
                         .font(.system(size: 13, weight: .medium))
@@ -242,11 +228,35 @@ struct SessionCard: View {
         "\(session.firstAt.formatted(Self.exactDateStyle)) → \(session.lastAt.formatted(Self.exactDateStyle))"
     }
 
+    private var resumeHelp: String {
+        "\(session.profile.resumeCommand(sessionID: session.id)) in \(session.cwd ?? "")"
+    }
+
     private var stats: String {
-        let messages = "\(session.messageCount) messages"
+        // Codex's index has a token total but neither messages nor cost.
+        guard let messageCount = session.messageCount else {
+            return "\((session.tokens ?? 0).formatted(.number.notation(.compactName))) tokens"
+        }
+        let messages = "\(messageCount) messages"
         guard let cost = session.costUSD else {
             return messages + " · cost unknown"
         }
         return messages + " · " + cost.formatted(.currency(code: "USD"))
+    }
+}
+
+/// Which Claude profile (or Codex) a session belongs to.
+struct ProfileBadge: View {
+    let profile: Profile
+
+    var body: some View {
+        Text(profile.label.uppercased())
+            .font(.system(size: 10, weight: .bold))
+            .tracking(0.5)
+            .foregroundStyle(profile.tint)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(profile.tint.opacity(0.12), in: Capsule())
+            .fixedSize()
     }
 }

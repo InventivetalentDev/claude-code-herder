@@ -1,12 +1,10 @@
 import Darwin
 import Foundation
 
-/// Sessions currently running in some terminal, from Claude Code's live registry:
-/// one `~/.claude/sessions/<pid>.json` per running process.
+/// Claude sessions currently running in some terminal, from Claude Code's live registry:
+/// one `<config dir>/sessions/<pid>.json` per running process, per profile (`Profile.registry`).
+/// Codex keeps no such registry, so its sessions never show as running.
 enum OpenSessions {
-    static let registry = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".claude/sessions")
-
     private struct Entry: Decodable {
         let pid: Int32
         let sessionId: String
@@ -21,15 +19,21 @@ enum OpenSessions {
         let failures: [IndexFailure]
     }
 
-    static func scan(_ dir: URL = registry) -> Result {
-        let files: [URL]
-        do {
-            files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-        } catch {
-            return Result(pids: [:], failures: [IndexFailure(path: dir.path, message: "\(error)")])
+    static func scan(_ dirs: [URL]) -> Result {
+        var files: [URL] = []
+        var failures: [IndexFailure] = []
+        for dir in dirs {
+            // A profile that never ran a session has no registry yet.
+            guard FileManager.default.fileExists(atPath: dir.path) else {
+                continue
+            }
+            do {
+                files += try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
+            } catch {
+                failures.append(IndexFailure(path: dir.path, message: "\(error)"))
+            }
         }
         var pids: [String: Int32] = [:]
-        var failures: [IndexFailure] = []
         // Only the .json files; the .key files next to them are secrets we have no use for.
         for file in files where file.pathExtension == "json" {
             do {

@@ -12,13 +12,13 @@ enum SessionParser {
     }
 
     /// Returns nil for transcripts with no prompts (e.g. only file snapshots).
-    static func parse(transcript: URL, subagents: [URL]) throws -> Session? {
+    static func parse(transcript: URL, subagents: [URL], profile: Profile) throws -> Session? {
         var acc = Accumulator()
         try scan(transcript) { acc.addMain($0) }
         for subagent in subagents {
             try scan(subagent) { acc.addUsage($0) }
         }
-        return acc.session(id: transcript.deletingPathExtension().lastPathComponent)
+        return acc.session(id: transcript.deletingPathExtension().lastPathComponent, profile: profile)
     }
 
     // Only lines containing one of these get JSON-decoded; the rest (tool output, snapshots,
@@ -131,9 +131,36 @@ private struct Accumulator {
         }
         promptCount += 1
         if firstPrompt == nil {
-            firstPrompt = text
+            firstPrompt = Self.asTyped(text)
         }
         touch(entry)
+    }
+
+    /// Slash commands are stored as `<command-name>/x</command-name>…<command-args>a</command-args>`;
+    /// show them as typed (`/x a`). Nil for a bare command like `/login` and for a command's
+    /// `<local-command-stdout>`, which say nothing about the session, so the next prompt
+    /// describes it instead.
+    static func asTyped(_ prompt: String) -> String? {
+        if prompt.hasPrefix("<local-command-") {
+            return nil
+        }
+        guard let name = tagContent("command-name", in: prompt) else {
+            return prompt
+        }
+        let args = tagContent("command-args", in: prompt)?.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let args, !args.isEmpty else {
+            return nil
+        }
+        return "\(name) \(args)"
+    }
+
+    private static func tagContent(_ tag: String, in text: String) -> String? {
+        guard let open = text.range(of: "<\(tag)>"),
+            let close = text.range(of: "</\(tag)>", range: open.upperBound..<text.endIndex)
+        else {
+            return nil
+        }
+        return String(text[open.upperBound..<close.lowerBound])
     }
 
     private mutating func touch(_ entry: Entry) {
@@ -149,23 +176,26 @@ private struct Accumulator {
         lastAt = max(lastAt ?? at, at)
     }
 
-    func session(id: String) -> Session? {
+    func session(id: String, profile: Profile) -> Session? {
         guard promptCount > 0, let firstAt, let lastAt else {
             return nil
         }
         var cost = 0.0
         for (model, usage) in usageByMessage.values where usage.totalTokens > 0 {
             guard let rates = Pricing.rates(for: model) else {
-                return makeSession(id: id, firstAt: firstAt, lastAt: lastAt, cost: nil)
+                return makeSession(id: id, profile: profile, firstAt: firstAt, lastAt: lastAt, cost: nil)
             }
             cost += Pricing.cost(of: usage, rates: rates)
         }
-        return makeSession(id: id, firstAt: firstAt, lastAt: lastAt, cost: cost)
+        return makeSession(id: id, profile: profile, firstAt: firstAt, lastAt: lastAt, cost: cost)
     }
 
-    private func makeSession(id: String, firstAt: Date, lastAt: Date, cost: Double?) -> Session {
+    private func makeSession(id: String, profile: Profile, firstAt: Date, lastAt: Date, cost: Double?)
+        -> Session
+    {
         Session(
             id: id,
+            profile: profile,
             cwd: cwd,
             title: customTitle ?? aiTitle ?? firstPrompt ?? id,
             recap: recap,

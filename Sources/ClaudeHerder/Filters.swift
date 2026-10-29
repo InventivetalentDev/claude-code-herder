@@ -67,7 +67,7 @@ enum SortKey: String, CaseIterable, Identifiable {
         case .firstMessage:
             return a.firstAt < b.firstAt
         case .messageCount:
-            return a.messageCount < b.messageCount
+            return (a.messageCount ?? 0) < (b.messageCount ?? 0)
         case .cost:
             return (a.costUSD ?? 0) < (b.costUSD ?? 0)
         }

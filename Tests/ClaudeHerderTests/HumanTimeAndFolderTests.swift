@@ -70,20 +70,10 @@ final class FolderStateTests: XCTestCase {
     func testClassifiesFolders() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
-        let cow = root.appendingPathComponent("cows/feature")
-        let plain = root.appendingPathComponent("plain")
-        try FileManager.default.createDirectory(
-            at: cow.appendingPathComponent(".git"), withIntermediateDirectories: true)
-        try "/src".write(to: cow.appendingPathComponent(".git/cow-source"), atomically: true, encoding: .utf8)
-        try FileManager.default.createDirectory(
-            at: cow.appendingPathComponent("tools/sub"), withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(
-            at: plain.appendingPathComponent(".git"), withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 
-        XCTAssertEqual(FolderState.of(cwd: cow.path), .liveCow)
-        XCTAssertEqual(FolderState.of(cwd: cow.appendingPathComponent("tools/sub").path), .liveCow)
-        XCTAssertEqual(FolderState.of(cwd: plain.path), .present)
-        XCTAssertEqual(FolderState.of(cwd: root.appendingPathComponent("cows/deleted").path), .missing)
+        XCTAssertEqual(FolderState.of(cwd: root.path), .present)
+        XCTAssertEqual(FolderState.of(cwd: root.appendingPathComponent("deleted").path), .missing)
         XCTAssertEqual(FolderState.of(cwd: nil), .missing)
     }
 }
@@ -91,7 +81,7 @@ final class FolderStateTests: XCTestCase {
 final class DeduplicationTests: XCTestCase {
     private func session(_ id: String, cwd: String, lastAt: TimeInterval) -> Session {
         Session(
-            id: id, cwd: cwd, title: id, recap: nil, firstPrompt: nil,
+            id: id, profile: .test(), cwd: cwd, title: id, recap: nil, firstPrompt: nil,
             firstAt: Date(timeIntervalSince1970: 0), lastAt: Date(timeIntervalSince1970: lastAt),
             messageCount: 1, costUSD: nil)
     }
