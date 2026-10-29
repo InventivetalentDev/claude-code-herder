@@ -51,7 +51,7 @@ enum TranscriptSearch {
     }
 }
 
-/// Resumes sessions in a new Ghostty tab, via Ghostty's AppleScript dictionary.
+/// Opens and finds Claude sessions in Ghostty tabs, via Ghostty's AppleScript dictionary.
 enum Ghostty {
     private static let script = """
         on run argv
@@ -98,9 +98,14 @@ enum Ghostty {
     }
 
     static func resume(sessionID: String, in directory: String) async throws {
+        try await newTab(in: directory, typing: "claude --resume \(sessionID)")
+    }
+
+    /// Opens a tab in `directory` and types `command` into its shell, then Return.
+    static func newTab(in directory: String, typing command: String) async throws {
         let osascript = URL(fileURLWithPath: "/usr/bin/osascript")
         // argv keeps paths with quotes or spaces out of the script source.
-        _ = try await run(osascript, ["-e", script, directory, "claude --resume \(sessionID)"])
+        _ = try await run(osascript, ["-e", script, directory, command])
     }
 }
 

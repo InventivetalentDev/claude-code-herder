@@ -16,6 +16,8 @@ struct ContentView: View {
     @State private var showingPeriod = false
     @State private var showDone = false
     @State private var liveCowsOnly = false
+    /// Non-nil while the new-session wizard is up; holds the cows it offers.
+    @State private var newSessionCows: CowList?
 
     private static let pageSize = 40
 
@@ -25,6 +27,7 @@ struct ContentView: View {
             Divider().overlay(Theme.border)
             content
         }
+        .overlay(alignment: .bottomTrailing) { newSessionButton.padding(28) }
         .background(Theme.background)
         .preferredColorScheme(.light)
         .task { await store.reload() }
@@ -49,6 +52,9 @@ struct ContentView: View {
             Button("Keep", role: .cancel) {}
         } message: { offer in
             Text(offer.message)
+        }
+        .sheet(item: $newSessionCows) { cows in
+            NewSessionWizard(cows: cows.urls, onStart: startSession)
         }
         .alert("Something went wrong", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
@@ -91,6 +97,20 @@ struct ContentView: View {
         .padding(.horizontal, 28)
         .padding(.top, 34)  // clears the traffic lights over the hidden title bar
         .padding(.bottom, 16)
+    }
+
+    private var newSessionButton: some View {
+        Button(action: showNewSession) {
+            Image(systemName: "plus")
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 60, height: 60)
+                .background(Theme.ink, in: Circle())
+                .shadow(color: Theme.ink.opacity(0.25), radius: 10, y: 4)
+        }
+        .buttonStyle(.plain)
+        .keyboardShortcut("n")
+        .help("New session (⌘N)")
     }
 
     private var searchField: some View {
@@ -347,6 +367,24 @@ struct ContentView: View {
         }
     }
 
+    private func showNewSession() {
+        do {
+            newSessionCows = CowList(urls: try NewSession.cows(of: NewSession.repo))
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func startSession(_ workspace: Workspace, name: String, prompt: String) {
+        Task {
+            do {
+                try await NewSession.start(workspace, name: name, prompt: prompt)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     /// Jumps to the session's tab if it's already running, else resumes it in a new one.
     private func open(_ session: Session) {
         let pid = store.openPIDs[session.id]
@@ -461,4 +499,10 @@ private struct CowOffer {
         lines.append(warnings.isEmpty ? "Everything is committed and pushed." : warnings.joined(separator: "\n"))
         return lines.joined(separator: "\n\n")
     }
+}
+
+/// The cows the new-session wizard offers, taken when it opens.
+private struct CowList: Identifiable {
+    let id = UUID()
+    let urls: [URL]
 }
