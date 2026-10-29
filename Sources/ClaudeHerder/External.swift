@@ -105,7 +105,7 @@ enum Ghostty {
 }
 
 /// Runs a process off the main thread and returns its stdout.
-private func run(_ executable: URL, _ args: [String], okExitCodes: Set<Int32> = [0]) async throws
+func run(_ executable: URL, _ args: [String], okExitCodes: Set<Int32> = [0]) async throws
     -> String
 {
     try await withCheckedThrowingContinuation { continuation in

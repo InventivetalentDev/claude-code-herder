@@ -11,6 +11,8 @@ struct ContentView: View {
     @State private var sortDescending = true
     @State private var pageLimit = ContentView.pageSize
     @State private var errorMessage: String?
+    @State private var cowOffer: CowOffer?
+    @State private var deletingCow: String?
     @State private var showingPeriod = false
     @State private var showDone = false
     @State private var liveCowsOnly = false
@@ -38,6 +40,16 @@ struct ContentView: View {
         }
         .task(id: query) { await runSearch() }
         .onChange(of: filterKey) { pageLimit = Self.pageSize }
+        .alert(
+            cowOffer.map { "Delete the \($0.status.root.lastPathComponent) cow?" } ?? "",
+            isPresented: Binding(get: { cowOffer != nil }, set: { if !$0 { cowOffer = nil } }),
+            presenting: cowOffer
+        ) { offer in
+            Button("Delete cow", role: .destructive) { deleteCow(offer.status.root) }
+            Button("Keep", role: .cancel) {}
+        } message: { offer in
+            Text(offer.message)
+        }
         .alert("Something went wrong", isPresented: .constant(errorMessage != nil)) {
             Button("OK") { errorMessage = nil }
         } message: {
@@ -182,6 +194,7 @@ struct ContentView: View {
                                     withAnimation(.easeInOut(duration: 0.35)) {
                                         store.toggleDone(session)
                                     }
+                                    offerCowCleanup(after: session)
                                 }
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.92)))
@@ -207,6 +220,10 @@ struct ContentView: View {
             if let cost = totalCost {
                 Text("·")
                 Text(cost.formatted(.currency(code: "USD")))
+            }
+            if let deletingCow {
+                Text("·")
+                Text("Deleting the \(deletingCow) cow…")
             }
             if !store.failures.isEmpty {
                 Text("·")
@@ -292,6 +309,41 @@ struct ContentView: View {
             searchMatches = ids
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Once every session in a cow is done, offer to free its disk space.
+    private func offerCowCleanup(after session: Session) {
+        guard store.done.isDone(session), let cwd = session.cwd,
+            let root = Cows.root(containing: cwd)
+        else {
+            return
+        }
+        let inCow = Cows.sessions(in: root, among: store.sessions)
+        guard inCow.allSatisfy(store.done.isDone) else {
+            return
+        }
+        let running = inCow.filter { store.openPIDs[$0.id] != nil }.count
+        Task {
+            do {
+                let status = try await Cows.status(of: root)
+                cowOffer = CowOffer(status: status, runningSessions: running)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func deleteCow(_ root: URL) {
+        deletingCow = root.lastPathComponent
+        Task {
+            do {
+                try await Cows.delete(root)
+                await store.reload()
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+            deletingCow = nil
         }
     }
 
@@ -383,5 +435,30 @@ private struct FilterChip: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).stroke(isOn ? Theme.ink : Theme.border))
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// The prompt shown once the last session in a cow is marked done.
+private struct CowOffer {
+    let status: Cows.Status
+    let runningSessions: Int
+
+    var message: String {
+        var lines = [
+            "All its sessions are done.",
+            "\(status.root.path) (branch \(status.branch))",
+        ]
+        var warnings: [String] = []
+        if status.uncommittedFiles > 0 {
+            warnings.append("⚠️ \(status.uncommittedFiles) uncommitted file(s) will be lost")
+        }
+        if status.unpushedCommits > 0 {
+            warnings.append("⚠️ \(status.unpushedCommits) commit(s) not pushed anywhere will be lost")
+        }
+        if runningSessions > 0 {
+            warnings.append("⚠️ \(runningSessions) session(s) still running there; close the tab first")
+        }
+        lines.append(warnings.isEmpty ? "Everything is committed and pushed." : warnings.joined(separator: "\n"))
+        return lines.joined(separator: "\n\n")
     }
 }
