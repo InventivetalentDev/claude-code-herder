@@ -1,4 +1,4 @@
-// Draws the app icon: Claude's spark caught in a lasso. Usage: swift draw_icon.swift <out.png>
+// Draws the app icon: Claude's symbol caught in a lasso. Usage: swift draw_icon.swift <out.png>
 import AppKit
 import SwiftUI
 
@@ -8,26 +8,19 @@ func color(_ hex: UInt32) -> Color {
         blue: Double(hex & 0xFF) / 255)
 }
 
-let clay = color(0xD97757)
 let ropeDark = color(0x8A6A45)
 let ropeLight = color(0xC9A06A)
 
-struct Spark: View {
-    let size: CGFloat
-
-    var body: some View {
-        ZStack {
-            ForEach(0..<12, id: \.self) { i in
-                Capsule()
-                    .fill(clay)
-                    .frame(width: size * 0.085, height: size * (i.isMultiple(of: 2) ? 0.5 : 0.4))
-                    .offset(y: -size * 0.22)
-                    .rotationEffect(.degrees(Double(i) * 30))
-            }
-        }
-        .frame(width: size, height: size)
+/// Claude's official symbol (CC0, Wikimedia Commons), kept next to this script.
+let symbol: NSImage = {
+    let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .appendingPathComponent("claude_symbol.svg")
+    guard let image = NSImage(contentsOf: url) else {
+        fatalError("couldn't load \(url.path)")
     }
-}
+    image.size = NSSize(width: 1024, height: 1024)  // rasterize sharp, not at its 100px viewBox
+    return image
+}()
 
 /// The loop around the spark, plus the tail sweeping down and out of the frame.
 struct Rope: Shape {
@@ -68,9 +61,10 @@ struct Icon: View {
                     colors: [color(0xFCFBF8), color(0xEDEAE0)], startPoint: .top, endPoint: .bottom))
                 .frame(width: 824, height: 824)
                 .shadow(color: .black.opacity(0.22), radius: 18, y: 10)
-            Spark(size: 330)
-                .offset(x: 6, y: 6)
-                .compositingGroup()  // one shadow for the whole spark, not one per ray
+            Image(nsImage: symbol)
+                .resizable()
+                .frame(width: 290, height: 290)
+                .offset(x: 6, y: -4)
                 .shadow(color: color(0x9E3B2C).opacity(0.25), radius: 6, y: 4)
             ZStack {
                 RopeStroke(shape: Rope())
