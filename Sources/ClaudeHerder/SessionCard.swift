@@ -5,6 +5,8 @@ struct SessionCard: View {
     let session: Session
     let folder: FolderState
     let isDone: Bool
+    /// Running in a terminal tab right now, so opening it again would make a duplicate.
+    let isOpen: Bool
     let onOpen: () -> Void
     let onToggleDone: () -> Void
 
@@ -86,7 +88,7 @@ struct SessionCard: View {
         }
         .overlay(
             RoundedRectangle(cornerRadius: 14)
-                .stroke(isHovered ? Theme.borderStrong : Theme.border)
+                .stroke(borderColor, lineWidth: isOpen ? 2 : 1)
         )
         .shadow(color: Theme.ink.opacity(isHovered ? 0.08 : 0), radius: 12, y: 4)
         .opacity(isLeaving ? 0.4 : 1)
@@ -155,6 +157,13 @@ struct SessionCard: View {
         .buttonStyle(.plain)
         .help(looksDone ? "Mark as not done" : "Mark as done")
         .opacity(looksDone || isHovered ? 1 : 0)
+    }
+
+    private var borderColor: Color {
+        if isOpen {
+            return Theme.doneGreen
+        }
+        return isHovered ? Theme.borderStrong : Theme.border
     }
 
     /// Just ticked, waiting out the pause before the card goes away.

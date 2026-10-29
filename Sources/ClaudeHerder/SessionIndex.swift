@@ -147,6 +147,10 @@ final class SessionStore {
     /// Not cached: folders get deleted without touching the transcript.
     private(set) var folderStates: [String: FolderState] = [:]
     private(set) var done = DoneMarks.load()
+    /// Sessions running in a terminal right now.
+    private(set) var openIDs: Set<String> = []
+    private var openFailures: [IndexFailure] = []
+    private var indexFailures: [IndexFailure] = []
 
     func reload() async {
         guard !isLoading else {
@@ -159,10 +163,19 @@ final class SessionStore {
             return (result, Dictionary(uniqueKeysWithValues: states))
         }.value
         sessions = result.sessions
-        failures = result.failures
+        indexFailures = result.failures
+        failures = indexFailures + openFailures
         folderStates = states
         isLoading = false
         hasLoaded = true
+    }
+
+    /// Cheap (a handful of tiny files), so it runs on a short timer.
+    func refreshOpenSessions() async {
+        let result = await Task.detached { OpenSessions.scan() }.value
+        openIDs = result.sessionIDs
+        openFailures = result.failures
+        failures = indexFailures + openFailures
     }
 
     func toggleDone(_ session: Session) {

@@ -26,6 +26,13 @@ struct ContentView: View {
         .background(Theme.background)
         .preferredColorScheme(.light)
         .task { await store.reload() }
+        .task {
+            // Tabs open and close while the app is up, so keep checking.
+            while !Task.isCancelled {
+                await store.refreshOpenSessions()
+                try? await Task.sleep(for: .seconds(3))
+            }
+        }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             Task { await store.reload() }
         }
@@ -169,6 +176,7 @@ struct ContentView: View {
                                 session: session,
                                 folder: store.folderStates[session.id] ?? .missing,
                                 isDone: store.done.isDone(session),
+                                isOpen: store.openIDs.contains(session.id),
                                 onOpen: { open(session) },
                                 onToggleDone: {
                                     withAnimation(.easeInOut(duration: 0.35)) {
@@ -202,7 +210,7 @@ struct ContentView: View {
             }
             if !store.failures.isEmpty {
                 Text("·")
-                Button("\(store.failures.count) transcripts failed to load") {
+                Button("\(store.failures.count) files failed to load") {
                     errorMessage = store.failures.map { "\($0.path)\n\($0.message)" }
                         .joined(separator: "\n\n")
                 }
