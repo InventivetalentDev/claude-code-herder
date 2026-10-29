@@ -133,6 +133,19 @@ enum Ghostty {
     }
 }
 
+/// The Fork git client, through the `fork` CLI it installs.
+enum ForkApp {
+    static func open(_ directory: String) async throws {
+        // GUI apps don't inherit the shell PATH, so look where the CLI gets installed.
+        let candidates = ["/opt/homebrew/bin/fork", "/usr/local/bin/fork"]
+        guard let path = candidates.first(where: FileManager.default.isExecutableFile) else {
+            throw CommandError(
+                errorDescription: "The fork CLI isn't installed (Fork → Install Command Line Tools)")
+        }
+        _ = try await run(URL(fileURLWithPath: path), [directory])
+    }
+}
+
 /// Runs a process off the main thread and returns its stdout.
 func run(_ executable: URL, _ args: [String], okExitCodes: Set<Int32> = [0]) async throws
     -> String

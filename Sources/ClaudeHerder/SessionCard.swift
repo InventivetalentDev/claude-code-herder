@@ -8,6 +8,7 @@ struct SessionCard: View {
     /// Running in a terminal tab right now, so opening it again would make a duplicate.
     let isOpen: Bool
     let onOpen: () -> Void
+    let onFork: () -> Void
     let onToggleDone: () -> Void
 
     @State private var isHovered = false
@@ -108,7 +109,18 @@ struct SessionCard: View {
     private var hoverActions: some View {
         ZStack(alignment: .bottomLeading) {
             RoundedRectangle(cornerRadius: 14).fill(Theme.dim)
-            Group {
+            HStack(spacing: 8) {
+                if folder != .missing && session.cwd != nil {
+                    Button(action: onFork) {
+                        HStack(spacing: 4) {
+                            Text("Fork")
+                            Image(systemName: "arrow.up.forward.app")
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                    }
+                    .buttonStyle(PillButtonStyle(prominent: false))
+                    .help("Review the changes in Fork")
+                }
                 if canOpen {
                     Button(action: onOpen) {
                         HStack(spacing: 4) {

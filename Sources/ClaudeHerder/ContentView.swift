@@ -210,6 +210,7 @@ struct ContentView: View {
                                 isDone: store.done.isDone(session),
                                 isOpen: store.openPIDs[session.id] != nil,
                                 onOpen: { open(session) },
+                                onFork: { fork(session) },
                                 onToggleDone: {
                                     withAnimation(.easeInOut(duration: 0.35)) {
                                         store.toggleDone(session)
@@ -388,6 +389,19 @@ struct ContentView: View {
         Task {
             do {
                 try await NewSession.start(workspace, name: name, prompt: prompt)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    private func fork(_ session: Session) {
+        guard let cwd = session.cwd else {
+            return
+        }
+        Task {
+            do {
+                try await ForkApp.open(cwd)
             } catch {
                 errorMessage = error.localizedDescription
             }
