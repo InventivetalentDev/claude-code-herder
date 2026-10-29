@@ -99,9 +99,9 @@ struct SessionCard: View {
         .onHover { isHovered = $0 }
     }
 
-    /// Resuming needs the folder, so a deleted one can't be opened.
+    /// A running session can always be jumped to; resuming one needs its folder.
     private var canOpen: Bool {
-        folder != .missing && session.cwd != nil
+        isOpen || (folder != .missing && session.cwd != nil)
     }
 
     /// Dims the card, shows Open in the middle and the session ID bottom-left.
@@ -112,13 +112,13 @@ struct SessionCard: View {
                 if canOpen {
                     Button(action: onOpen) {
                         HStack(spacing: 4) {
-                            Text("Open")
+                            Text(isOpen ? "Go to tab" : "Open")
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 10, weight: .semibold))
                         }
                     }
                     .buttonStyle(PillButtonStyle())
-                    .help("claude --resume in \(session.cwd ?? "")")
+                    .help(isOpen ? "Already running; jump to its tab" : "claude --resume in \(session.cwd ?? "")")
                 } else {
                     Text("Folder deleted")
                         .font(.system(size: 13, weight: .medium))

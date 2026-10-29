@@ -148,7 +148,8 @@ final class SessionStore {
     private(set) var folderStates: [String: FolderState] = [:]
     private(set) var done = DoneMarks.load()
     /// Sessions running in a terminal right now.
-    private(set) var openIDs: Set<String> = []
+    /// Session ID to the PID of its Claude process.
+    private(set) var openPIDs: [String: Int32] = [:]
     private var openFailures: [IndexFailure] = []
     private var indexFailures: [IndexFailure] = []
 
@@ -173,7 +174,7 @@ final class SessionStore {
     /// Cheap (a handful of tiny files), so it runs on a short timer.
     func refreshOpenSessions() async {
         let result = await Task.detached { OpenSessions.scan() }.value
-        openIDs = result.sessionIDs
+        openPIDs = result.pids
         openFailures = result.failures
         failures = indexFailures + openFailures
     }

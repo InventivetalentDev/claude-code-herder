@@ -37,7 +37,7 @@ final class OpenSessionsTests: XCTestCase {
         let result = OpenSessions.scan(dir)
 
         XCTAssertEqual(result.failures, [])
-        XCTAssertEqual(result.sessionIDs, ["live"])
+        XCTAssertEqual(result.pids, ["live": me])
     }
 }
 
@@ -49,6 +49,6 @@ final class OpenSessionsRealTests: XCTestCase {
         let result = OpenSessions.scan()
 
         XCTAssertEqual(result.failures, [])
-        XCTAssertTrue(result.sessionIDs.contains(sessionID))
+        XCTAssertNotNil(result.pids[sessionID])
     }
 }

@@ -176,7 +176,7 @@ struct ContentView: View {
                                 session: session,
                                 folder: store.folderStates[session.id] ?? .missing,
                                 isDone: store.done.isDone(session),
-                                isOpen: store.openIDs.contains(session.id),
+                                isOpen: store.openPIDs[session.id] != nil,
                                 onOpen: { open(session) },
                                 onToggleDone: {
                                     withAnimation(.easeInOut(duration: 0.35)) {
@@ -295,13 +295,17 @@ struct ContentView: View {
         }
     }
 
+    /// Jumps to the session's tab if it's already running, else resumes it in a new one.
     private func open(_ session: Session) {
-        guard let cwd = session.cwd else {
-            return
-        }
+        let pid = store.openPIDs[session.id]
+        let cwd = session.cwd
         Task {
             do {
-                try await Ghostty.resume(sessionID: session.id, in: cwd)
+                if let pid {
+                    try await Ghostty.focus(pid: pid)
+                } else if let cwd {
+                    try await Ghostty.resume(sessionID: session.id, in: cwd)
+                }
             } catch {
                 errorMessage = error.localizedDescription
             }

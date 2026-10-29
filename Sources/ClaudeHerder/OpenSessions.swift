@@ -16,7 +16,8 @@ enum OpenSessions {
     }
 
     struct Result {
-        let sessionIDs: Set<String>
+        /// Session ID to the PID of the Claude process running it.
+        let pids: [String: Int32]
         let failures: [IndexFailure]
     }
 
@@ -25,9 +26,9 @@ enum OpenSessions {
         do {
             files = try FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
         } catch {
-            return Result(sessionIDs: [], failures: [IndexFailure(path: dir.path, message: "\(error)")])
+            return Result(pids: [:], failures: [IndexFailure(path: dir.path, message: "\(error)")])
         }
-        var ids = Set<String>()
+        var pids: [String: Int32] = [:]
         var failures: [IndexFailure] = []
         // Only the .json files; the .key files next to them are secrets we have no use for.
         for file in files where file.pathExtension == "json" {
@@ -35,13 +36,13 @@ enum OpenSessions {
                 let entry = try JSONDecoder().decode(Entry.self, from: Data(contentsOf: file))
                 // Background jobs (`claude -p`, SDK) have no tab to point at.
                 if entry.kind == "interactive", isRunning(entry) {
-                    ids.insert(entry.sessionId)
+                    pids[entry.sessionId] = entry.pid
                 }
             } catch {
                 failures.append(IndexFailure(path: file.path, message: "\(error)"))
             }
         }
-        return Result(sessionIDs: ids, failures: failures)
+        return Result(pids: pids, failures: failures)
     }
 
     /// Files outlive crashed processes and PIDs get reused, so also check the start time.

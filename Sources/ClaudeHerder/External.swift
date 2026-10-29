@@ -71,6 +71,32 @@ enum Ghostty {
         end run
         """
 
+    private static let focusScript = """
+        on run argv
+            set target to (item 1 of argv) as integer
+            tell application "Ghostty"
+                repeat with t in terminals
+                    if (pid of t) is target then
+                        focus t
+                        activate
+                        return "focused"
+                    end if
+                end repeat
+            end tell
+            return "missing"
+        end run
+        """
+
+    /// Brings forward the tab whose foreground process is `pid` (a running Claude session).
+    static func focus(pid: Int32) async throws {
+        let osascript = URL(fileURLWithPath: "/usr/bin/osascript")
+        let result = try await run(osascript, ["-e", focusScript, String(pid)])
+        guard result.trimmingCharacters(in: .whitespacesAndNewlines) == "focused" else {
+            throw CommandError(
+                errorDescription: "This session is running, but not in a Ghostty tab (process \(pid)).")
+        }
+    }
+
     static func resume(sessionID: String, in directory: String) async throws {
         let osascript = URL(fileURLWithPath: "/usr/bin/osascript")
         // argv keeps paths with quotes or spaces out of the script source.
