@@ -29,17 +29,17 @@ struct Spark: View {
     }
 }
 
-/// The loop around the spark, plus the tail sweeping up and out of the frame.
+/// The loop around the spark, plus the tail sweeping down and out of the frame.
 struct Rope: Shape {
-    static let knot = CGPoint(x: 764, y: 622)
+    static let knot = CGPoint(x: 764, y: 402)
 
     func path(in rect: CGRect) -> Path {
         var p = Path()
-        p.addEllipse(in: CGRect(x: 222, y: 312, width: 580, height: 420))
+        p.addEllipse(in: CGRect(x: 222, y: 292, width: 580, height: 420))
         p.move(to: Self.knot)
         p.addCurve(
-            to: CGPoint(x: 1000, y: 140), control1: CGPoint(x: 900, y: 600),
-            control2: CGPoint(x: 820, y: 280))
+            to: CGPoint(x: 1000, y: 884), control1: CGPoint(x: 900, y: 424),
+            control2: CGPoint(x: 820, y: 744))
         return p
     }
 }
@@ -81,7 +81,7 @@ struct Icon: View {
             }
             .frame(width: 1024, height: 1024)
             .shadow(color: .black.opacity(0.18), radius: 4, y: 3)
-            .rotationEffect(.degrees(-14))
+            .rotationEffect(.degrees(14))
             .mask(squircle.frame(width: 824, height: 824))
         }
         .frame(width: 1024, height: 1024)
