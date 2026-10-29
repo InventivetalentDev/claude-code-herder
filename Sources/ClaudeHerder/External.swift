@@ -71,15 +71,21 @@ enum Ghostty {
         end run
         """
 
-    private static let focusScript = """
+    /// Finds the terminal whose foreground process is `pid` and focuses or closes it.
+    private static let terminalScript = """
         on run argv
             set target to (item 1 of argv) as integer
+            set action to item 2 of argv
             tell application "Ghostty"
                 repeat with t in terminals
                     if (pid of t) is target then
-                        focus t
-                        activate
-                        return "focused"
+                        if action is "close" then
+                            close t
+                        else
+                            focus t
+                            activate
+                        end if
+                        return "found"
                     end if
                 end repeat
             end tell
@@ -89,9 +95,27 @@ enum Ghostty {
 
     /// Brings forward the tab whose foreground process is `pid` (a running Claude session).
     static func focus(pid: Int32) async throws {
+        try await runOnTerminal(pid: pid, action: "focus")
+    }
+
+    /// Closes the tab running `pid` and waits for that Claude session to exit.
+    static func close(pid: Int32) async throws {
+        try await runOnTerminal(pid: pid, action: "close")
+        // The process outlives the tab by a few seconds (about 5 when measured).
+        let deadline = Date.now.addingTimeInterval(15)
+        while kill(pid, 0) == 0 {
+            guard Date.now < deadline else {
+                throw CommandError(
+                    errorDescription: "Closed its tab, but process \(pid) is still running.")
+            }
+            try await Task.sleep(for: .milliseconds(200))
+        }
+    }
+
+    private static func runOnTerminal(pid: Int32, action: String) async throws {
         let osascript = URL(fileURLWithPath: "/usr/bin/osascript")
-        let result = try await run(osascript, ["-e", focusScript, String(pid)])
-        guard result.trimmingCharacters(in: .whitespacesAndNewlines) == "focused" else {
+        let result = try await run(osascript, ["-e", terminalScript, String(pid), action])
+        guard result.trimmingCharacters(in: .whitespacesAndNewlines) == "found" else {
             throw CommandError(
                 errorDescription: "This session is running, but not in a Ghostty tab (process \(pid)).")
         }

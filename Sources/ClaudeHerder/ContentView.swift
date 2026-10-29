@@ -214,7 +214,7 @@ struct ContentView: View {
                                     withAnimation(.easeInOut(duration: 0.35)) {
                                         store.toggleDone(session)
                                     }
-                                    offerCowCleanup(after: session)
+                                    finish(session)
                                 }
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.92)))
@@ -332,11 +332,27 @@ struct ContentView: View {
         }
     }
 
+    /// A session just marked done: close its tab, then maybe offer to delete its cow.
+    private func finish(_ session: Session) {
+        guard store.done.isDone(session) else {
+            return
+        }
+        Task {
+            do {
+                if let pid = store.openPIDs[session.id] {
+                    try await Ghostty.close(pid: pid)
+                    await store.refreshOpenSessions()
+                }
+                try await offerCowCleanup(after: session)
+            } catch {
+                errorMessage = error.localizedDescription
+            }
+        }
+    }
+
     /// Once every session in a cow is done, offer to free its disk space.
-    private func offerCowCleanup(after session: Session) {
-        guard store.done.isDone(session), let cwd = session.cwd,
-            let root = Cows.root(containing: cwd)
-        else {
+    private func offerCowCleanup(after session: Session) async throws {
+        guard let cwd = session.cwd, let root = Cows.root(containing: cwd) else {
             return
         }
         let inCow = Cows.sessions(in: root, among: store.sessions)
@@ -344,14 +360,7 @@ struct ContentView: View {
             return
         }
         let running = inCow.filter { store.openPIDs[$0.id] != nil }.count
-        Task {
-            do {
-                let status = try await Cows.status(of: root)
-                cowOffer = CowOffer(status: status, runningSessions: running)
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        }
+        cowOffer = CowOffer(status: try await Cows.status(of: root), runningSessions: running)
     }
 
     private func deleteCow(_ root: URL) {
