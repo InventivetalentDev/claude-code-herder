@@ -11,10 +11,7 @@ enum TranscriptSearch {
         matching query: String, in roots: [URL], codexParents: [String: String] = [:]
     ) async throws -> Set<String> {
         let words = query.split(whereSeparator: \.isWhitespace).map(String.init)
-        let rg = try Tools.find("rg", formula: "ripgrep")
-        // Without zstd on its PATH, ripgrep silently skips Codex's compressed rollouts.
-        let zstd = try Tools.find("zstd", formula: "zstd")
-        let environment = ["PATH": "\(zstd.deletingLastPathComponent().path):/usr/bin:/bin"]
+        let (rg, environment) = try Tools.ripgrep()
         let roots = roots.filter { FileManager.default.fileExists(atPath: $0.path) }
         // Given no paths, ripgrep would search the current directory instead.
         guard !roots.isEmpty else {
@@ -53,15 +50,9 @@ enum TranscriptSearch {
     }
 
     static func sessionID(forTranscript url: URL, codexParents: [String: String]) -> String {
-        let name = url.lastPathComponent
-        // Codex: `rollout-<timestamp>-<uuid>.jsonl`, compressed to `.jsonl.zst` once old.
-        // Subagents get their own rollout; they belong to the thread that spawned them.
-        if name.hasPrefix("rollout-") {
-            var stem = Substring(name)
-            for ext in [".zst", ".jsonl"] where stem.hasSuffix(ext) {
-                stem = stem.dropLast(ext.count)
-            }
-            return CodexIndex.rootThread(of: String(stem.suffix(36)), parents: codexParents)
+        // Codex subagents get their own rollout; they belong to the thread that spawned them.
+        if let thread = CodexIndex.threadID(ofRollout: url) {
+            return CodexIndex.rootThread(of: thread, parents: codexParents)
         }
         // Claude subagent transcripts live in `<uuid>/subagents/`; they belong to `<uuid>`.
         let parent = url.deletingLastPathComponent()
@@ -82,6 +73,14 @@ enum Tools {
             throw CommandError(errorDescription: "\(name) not found; install it with `brew install \(formula)`")
         }
         return URL(fileURLWithPath: "\(dir)/\(name)")
+    }
+
+    /// ripgrep, and the environment it needs to read Codex's compressed rollouts: without zstd
+    /// on its PATH, it silently skips them.
+    static func ripgrep() throws -> (url: URL, environment: [String: String]) {
+        let rg = try find("rg", formula: "ripgrep")
+        let zstd = try find("zstd", formula: "zstd")
+        return (rg, ["PATH": "\(zstd.deletingLastPathComponent().path):/usr/bin:/bin"])
     }
 }
 

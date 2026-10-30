@@ -143,7 +143,7 @@ enum SessionIndexer {
         return transcripts
     }
 
-    private static func fingerprintPart(_ url: URL) throws -> String {
+    static func fingerprintPart(_ url: URL) throws -> String {
         let values = try url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
         let mtime = values.contentModificationDate?.timeIntervalSince1970 ?? 0
         return "\(url.lastPathComponent):\(values.fileSize ?? 0):\(mtime)"

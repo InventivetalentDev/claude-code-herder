@@ -4,7 +4,7 @@ A Mac app to browse, search and resume your Claude Code and Codex sessions, inst
 
 ![Claude Code Herder](docs/screenshot.jpg)
 
-Each session is a card with its title, recap, dates, message count and cost (token count for Codex).
+Each session is a card with its title, recap, dates, message count (token count for Codex) and cost.
 Click one to resume it in a new [iTerm2](https://iterm2.com) tab, or jump to its tab if it's already running.
 
 ## Profiles
@@ -52,7 +52,9 @@ brew install ripgrep zstd
 
 The first click on a card asks for permission to control iTerm2.
 
-Cost is estimated from Anthropic's API list prices.
+Cost is estimated from Anthropic's and OpenAI's API list prices, subagents included. For Codex, each
+thread is priced at the model it last used, and auto-review threads are left out: their model has
+no list price.
 
 ## License
 

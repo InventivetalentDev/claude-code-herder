@@ -42,6 +42,48 @@ enum Pricing {
     }
 }
 
+/// OpenAI API list prices (USD per million tokens) for the models Codex runs, as of 2026-10.
+/// Cache writes aren't priced: Codex logs them without the 30m/12h split the prices need.
+enum OpenAIPricing {
+    struct Rates {
+        let input: Double
+        let cachedInput: Double
+        let output: Double
+    }
+
+    /// Requests with more input than this are billed at the long-context rates.
+    static let longContextThreshold = 272_000
+
+    static func rates(for model: String) -> (short: Rates, long: Rates)? {
+        switch model {
+        case "gpt-6-astra":
+            return (Rates(input: 10, cachedInput: 1, output: 50), Rates(input: 20, cachedInput: 2, output: 75))
+        case "gpt-6.1-sol":
+            return (Rates(input: 2, cachedInput: 0.10, output: 10), Rates(input: 4, cachedInput: 0.20, output: 15))
+        case "gpt-6-sol":
+            return (Rates(input: 2, cachedInput: 0.20, output: 10), Rates(input: 4, cachedInput: 0.40, output: 15))
+        default:
+            return nil
+        }
+    }
+
+    /// Nil when the model has no known price.
+    static func cost(of usage: CodexUsage.Split, model: String?) -> Double? {
+        guard let model, let rates = rates(for: model) else {
+            return nil
+        }
+        return cost(of: usage.short, rates: rates.short) + cost(of: usage.long, rates: rates.long)
+    }
+
+    private static func cost(of tokens: CodexUsage.Tokens, rates: Rates) -> Double {
+        // Cached input is part of `input`, and reasoning part of `output`.
+        let microDollars = Double(tokens.input - tokens.cachedInput) * rates.input
+            + Double(tokens.cachedInput) * rates.cachedInput
+            + Double(tokens.output) * rates.output
+        return microDollars / 1_000_000
+    }
+}
+
 /// The `usage` block of an assistant message.
 struct Usage: Decodable {
     struct CacheCreation: Decodable {

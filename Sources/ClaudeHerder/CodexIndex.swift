@@ -1,7 +1,8 @@
 import Foundation
 
 /// Codex sessions, from the `threads` table of Codex's own state database. Reading the
-/// rollouts instead would mean decompressing most of them (older ones are `.jsonl.zst`).
+/// rollouts instead would mean decompressing most of them (older ones are `.jsonl.zst`);
+/// only costs come from there, through `CodexUsage`, which caches what it reads.
 enum CodexIndex {
     struct Result {
         let sessions: [Session]
@@ -34,6 +35,35 @@ enum CodexIndex {
         let parent: String
     }
 
+    private struct ThreadModel: Decodable {
+        let id: String
+        let model: String
+    }
+
+    /// What each thread the user started cost, its subagents' threads included. Auto-review
+    /// threads have no spawn edge, and their model no list price, so they're left out.
+    private struct Costs {
+        private var totals: [String: Double] = [:]
+        /// Threads with requests on a model that has no known price.
+        private var unpriced: Set<String> = []
+
+        init(usage: [String: CodexUsage.Split], models: [String: String], parents: [String: String]) {
+            for (thread, split) in usage {
+                let root = CodexIndex.rootThread(of: thread, parents: parents)
+                // At the model the thread last used; switching models mid-thread is rare.
+                if let cost = OpenAIPricing.cost(of: split, model: models[thread]) {
+                    totals[root, default: 0] += cost
+                } else {
+                    unpriced.insert(root)
+                }
+            }
+        }
+
+        func of(_ thread: String) -> Double? {
+            unpriced.contains(thread) ? nil : totals[thread, default: 0]
+        }
+    }
+
     // `user` covers the TUI, the desktop app and `codex exec`; subagents and auto-review
     // threads have their own thread_source. Threads never prompted have no first message.
     private static let threadsQuery = """
@@ -46,16 +76,32 @@ enum CodexIndex {
         """
     private static let edgesQuery =
         "select child_thread_id as child, parent_thread_id as parent from thread_spawn_edges"
+    private static let modelsQuery = "select id, model from threads where model is not null"
 
-    static func index(profile: Profile) async -> Result {
+    static func index(profile: Profile, usageCache: URL = CodexUsage.cacheURL) async -> Result {
         do {
             let db = try database(in: profile.home)
             let rows: [Row] = try await query(db, threadsQuery)
             let edges: [Edge] = try await query(db, edgesQuery)
+            let models: [ThreadModel] = try await query(db, modelsQuery)
+            let parents = Dictionary(edges.map { ($0.child, $0.parent) }, uniquingKeysWith: { a, _ in a })
+            var costs: Costs?
+            var failures: [IndexFailure] = []
+            do {
+                costs = Costs(
+                    usage: try await CodexUsage.byThread(roots: profile.transcriptRoots, cacheURL: usageCache),
+                    models: Dictionary(models.map { ($0.id, $0.model) }, uniquingKeysWith: { a, _ in a }),
+                    parents: parents)
+            } catch {
+                failures.append(
+                    IndexFailure(
+                        path: profile.transcriptRoots[0].path,
+                        message: "Can't estimate costs: \(error.localizedDescription)"))
+            }
             return Result(
-                sessions: rows.map { session($0, profile: profile) },
-                parents: Dictionary(edges.map { ($0.child, $0.parent) }, uniquingKeysWith: { a, _ in a }),
-                failures: [])
+                sessions: rows.map { session($0, profile: profile, cost: costs?.of($0.id)) },
+                parents: parents,
+                failures: failures)
         } catch {
             return Result(
                 sessions: [], parents: [:],
@@ -81,6 +127,16 @@ enum CodexIndex {
         return newest.url
     }
 
+    /// The thread ID in a rollout's name, `rollout-<timestamp>-<uuid>.jsonl`, which Codex
+    /// compresses to `.jsonl.zst` once old. Nil for other files.
+    static func threadID(ofRollout url: URL) -> String? {
+        let name = url.lastPathComponent
+        for ext in [".jsonl", ".jsonl.zst"] where name.hasPrefix("rollout-") && name.hasSuffix(ext) {
+            return String(name.dropLast(ext.count).suffix(36))
+        }
+        return nil
+    }
+
     /// Follows subagent links up to the thread the user started.
     static func rootThread(of id: String, parents: [String: String]) -> String {
         var id = id
@@ -104,7 +160,7 @@ enum CodexIndex {
         return try JSONDecoder().decode([T].self, from: Data(output.utf8))
     }
 
-    private static func session(_ row: Row, profile: Profile) -> Session {
+    private static func session(_ row: Row, profile: Profile, cost: Double?) -> Session {
         let name = row.name.flatMap { $0.isEmpty ? nil : $0 }
         let title = row.title.isEmpty ? nil : row.title
         return Session(
@@ -117,7 +173,7 @@ enum CodexIndex {
             firstAt: Date(timeIntervalSince1970: Double(row.createdAtMs) / 1000),
             lastAt: Date(timeIntervalSince1970: Double(row.updatedAtMs) / 1000),
             messageCount: nil,
-            costUSD: nil,
+            costUSD: cost,
             tokens: row.tokensUsed)
     }
 }

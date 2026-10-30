@@ -233,15 +233,13 @@ struct SessionCard: View {
     }
 
     private var stats: String {
-        // Codex's index has a token total but neither messages nor cost.
-        guard let messageCount = session.messageCount else {
-            return "\((session.tokens ?? 0).formatted(.number.notation(.compactName))) tokens"
-        }
-        let messages = "\(messageCount) messages"
+        // Codex's index has a token total instead of a message count.
+        let size = session.messageCount.map { "\($0) messages" }
+            ?? "\((session.tokens ?? 0).formatted(.number.notation(.compactName))) tokens"
         guard let cost = session.costUSD else {
-            return messages + " · cost unknown"
+            return size + " · cost unknown"
         }
-        return messages + " · " + cost.formatted(.currency(code: "USD"))
+        return size + " · " + cost.formatted(.currency(code: "USD"))
     }
 }
 
